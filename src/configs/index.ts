@@ -10,7 +10,7 @@ export const config = {
         host: process.env.MYSQL_HOST || "localhost",
         user: process.env.MYSQL_USER || "root",
         password: process.env.MYSQL_PASSWORD || "",
-        database: process.env.MYSQL_DB || "smart_parking",
+        database: process.env.MYSQL_DB || "garage",
     },
     jwtSecret: process.env.JWT_SECRET || "secret",
     redis: {

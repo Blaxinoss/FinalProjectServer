@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  name            String           @db.VarChar(100)
+  phone           String           @unique @db.VarChar(15)
+  email           String           @unique @db.VarChar(100)
+  password        String           @db.VarChar(255)
+  role            String           @default("user") @db.VarChar(50)
+  NationalID      String           @unique @db.VarChar(20)
+  address         String           @db.VarChar(255)
+  licenseNumber   String           @unique @db.VarChar(50)
+  licenseExpiry   DateTime
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  Vehicles        Vehicle[]
+  ParkingSessions ParkingSession[]
+}
+
+model Vehicle {
+  id              Int              @id @default(autoincrement())
+  plate           String           @unique @db.VarChar(20)
+  color           String           @db.VarChar(50)
+  userId          Int
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  //status: parked, exited
+  updatedAt       DateTime         @updatedAt
+  ParkingSessions ParkingSession[]
+}
+
+model ParkingSession {
+  id                 Int                  @id @default(autoincrement())
+  userId             Int
+  VehicleId          Int
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle            Vehicle              @relation(fields: [VehicleId], references: [id], onDelete: Cascade)
+  slotNumber         String               @db.VarChar(20)
+  status             String               @default("pending") @db.VarChar(50) // pending, active, completed
+  entryTime          DateTime             @default(now())
+  exitTime           DateTime
+  paymentTransaction paymentTransaction[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model paymentTransaction {
+  id                Int            @id @default(autoincrement())
+  parkingSessionId  Int
+  parkingSession    ParkingSession @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
+  amount            Float          @db.Double
+  paymentMethod     String         @db.VarChar(50) // cash, card, mobile
+  paidAt            DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  transactionStatus String         @default("pending") @db.VarChar(50) // completed, failed, pending
+}
