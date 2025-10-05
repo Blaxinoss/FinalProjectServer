@@ -46,11 +46,11 @@ model Vehicle {
 model ParkingSession {
   id                 Int                  @id @default(autoincrement())
   userId             Int
-  VehicleId          Int
+  vehicleId          Int
   user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicle            Vehicle              @relation(fields: [VehicleId], references: [id], onDelete: Cascade)
-  slotNumber         String               @db.VarChar(20)
-  status             String               @default("pending") @db.VarChar(50) // pending, active, completed
+  vehicle            Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  slotId         String               @db.VarChar(20)
+  status             String               @default("active") @db.VarChar(50) // pending, active, completed
   entryTime          DateTime             @default(now())
   exitTime           DateTime
   paymentTransaction paymentTransaction[]

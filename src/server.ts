@@ -12,7 +12,6 @@ import { connectMQTT } from "./db&init/mqtt.js";
 const app: Application = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer);
-
 app.use(express.json());
 app.use("/api", routes);
 
