@@ -5,7 +5,7 @@ console.log('read')
 
 export const config = {
     port: process.env.PORT || 5000,
-    mongoUri: process.env.MONGO_URI || "",
+    mongoUri: process.env.MONGO_URL || "mongodb://localhost:27017/garage",
     mysql: {
         host: process.env.MYSQL_HOST || "localhost",
         user: process.env.MYSQL_USER || "root",
@@ -17,5 +17,11 @@ export const config = {
         host: process.env.REDIS_HOST || "127.0.0.1",
         port: Number(process.env.REDIS_PORT) || 6379,
     },
-    mqttBroker: process.env.MQTT_BROKER_URL || "mqtt://localhost",
-};
+ mqttBroker: process.env.MQTT_BROKER_URL || "mqtt://broker.emqx.io:1883",
+  mqttOptions: {
+    clientId: `mqttx_b9b3125e9_${Date.now()}`,
+    clean: true,
+    reconnectPeriod: 1000,
+    connectTimeout: 30000,
+    keepalive: 60,
+  },};

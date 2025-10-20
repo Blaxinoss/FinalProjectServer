@@ -6,6 +6,11 @@ import bcrypt from 'bcrypt';
 
 import { prisma } from "./routes.js";
 
+ //TODO
+   //  AUTH
+  //CHECK BUSINESS LOGIC
+
+  
 const router = Router();
 
 router.get("/", async (req: Request, res: Response): Promise<void> => {

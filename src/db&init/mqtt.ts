@@ -1,16 +1,84 @@
 import mqtt from "mqtt";
 import { config } from "../configs/index.js";
+import { ParkingEventQueue } from "../queues/queues.js";
+
+let client: mqtt.MqttClient;
+let isSubscribed = false; // ⭐ علم للتأكد إننا عملنا subscribe مرة واحدة بس
 
 export const connectMQTT = () => {
-    const client = mqtt.connect(config.mqttBroker);
-
-    client.on("connect", () => console.log("MQTT connected"));
-
-    client.on("error", (err) => {
-        console.error("MQTT connection error:", err);
-        client.end();
-        process.exit(1);
-    });
-
+  if (client && client.connected) {
+    console.log("MQTT client already connected");
     return client;
+  }
+
+  client = mqtt.connect(config.mqttBroker, config.mqttOptions);
+
+  client.on("connect", () => {
+    console.log("✅ MQTT connected successfully", client.options);
+    
+    // ⭐ اعمل subscribe مرة واحدة بس
+    if (!isSubscribed) {
+      // ❌ امسح الـ duplicate: مش محتاج الاتنين!
+      client.subscribe("garage/#", (err) => {
+        if (err) {
+          console.error("❌ Subscribe error:", err);
+        } else {
+          console.log("📡 Subscribed to garage/# topic");
+          isSubscribed = true; // ⭐ علّم إننا عملنا subscribe
+        }
+      });
+    }
+  });
+
+  client.on("message", (topic, payload) => {
+    console.log(`📩 Message received on topic ${topic}`);
+    const payloadStr = payload.toString();
+    
+    try {
+      const parsed = JSON.parse(payloadStr);
+      
+      if (topic.includes("raspberry-status")) {
+        console.log("🍓 RaspberryStatus message");
+        ParkingEventQueue.add("raspberry-status", parsed);
+
+      } else if (topic.includes("parking-event")) {
+        console.log("🚗 ParkingEvent message");
+        ParkingEventQueue.add("ParkingEvent", parsed);
+
+      } else if (topic === "garage/gate/entry/request") {
+        console.log("🚪 Gate Entry Request message");
+        ParkingEventQueue.add("gate-event-request", parsed);
+      }
+
+      
+
+
+    } catch (err: any) {
+      console.error("❌ Failed to parse MQTT payload:", err.message);
+      console.error("Raw payload:", payloadStr);
+    }
+  });
+
+  client.on("error", (err) => {
+    console.error("🚨 MQTT connection error:", err);
+    client.end();
+  });
+
+  // ⭐ لو الـ connection انقطع، reset الـ flag
+  client.on("close", () => {
+    console.log("⚠️ MQTT connection closed");
+    isSubscribed = false;
+  });
+
+  return client;
+};
+
+export const getMQTTClient = () => {
+  if (client) {
+    return client;
+  } else {
+    throw new Error(
+      "MQTT client not initialized. Did you call connectMQTT() first?"
+    );
+  }
 };

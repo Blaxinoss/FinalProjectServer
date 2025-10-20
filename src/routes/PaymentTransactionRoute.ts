@@ -1,8 +1,14 @@
 import { Router } from "express";
 import { prisma } from "./routes.js"; // Assuming prisma is exported from here
 import type { Request, Response } from "express";
-// You might need to import the PaymentTransaction type if you have it in your project setup
-// import type { paymentTransaction } from "../src/generated/prisma/index.js"; 
+
+
+
+ //TODO
+   //  AUTH
+  //CHECK BUSINESS LOGIC
+
+
 const router = Router();
 
 /* ---------------- GET ALL PAYMENT TRANSACTIONS ---------------- */

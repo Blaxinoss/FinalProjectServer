@@ -4,6 +4,14 @@ import type { Request, Response } from "express";
 import type { Vehicle } from "../src/generated/prisma/index.js";
 const router = Router();
 
+
+
+
+   //TODO
+   //  AUTH
+  //CHECK BUSINESS LOGIC
+
+
 /* ---------------- GET ALL VEHICLES ---------------- */
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -127,6 +135,7 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ message: "User Id is not provided" });
       return;
     }
+
 
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) {

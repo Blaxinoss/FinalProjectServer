@@ -41,7 +41,8 @@ export enum AlertType {
   OVERTIME = 'overtime',
   MAINTENANCE_NEEDED = 'maintenance_needed',
   CAMERA_OFFLINE = 'camera_offline',
-  SUSPICIOUS_ACTIVITY = 'suspicious_activity'
+  SUSPICIOUS_ACTIVITY = 'suspicious_activity',
+  SLOT_CONFLICT = 'slot_conflict'
 }
 
 export enum AlertSeverity {

@@ -13,7 +13,6 @@ export interface IAlert extends Document {
   status: AlertStatus;
   resolved_by?: string;
   resolved_at?: Date;
-  notes?: string;
   timestamp: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -50,7 +49,6 @@ const alertSchema = new Schema<IAlert>({
   },
   resolved_by: String,
   resolved_at: Date,
-  notes: String,
   timestamp: {
     type: Date,
     default: Date.now,
