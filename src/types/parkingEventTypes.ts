@@ -11,8 +11,15 @@ export enum SlotStatus {
   OCCUPIED = 'occupied',
   RESERVED = 'reserved',
   MAINTENANCE = 'maintenance',
-  DISABLED = 'disabled'
+  DISABLED = 'disabled',
+  ASSIGNED = 'assigned'
 }
+
+enum ParkingSessionStatus{
+  ACTIVE = 'active',
+  COMPLETED= 'completed',
+}
+
 
 export enum LightingCondition {
   BRIGHT = 'bright',

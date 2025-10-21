@@ -48,6 +48,7 @@ export const handleGateEntryRequest = async (job: Job) => {
     startTime: { lte: gracePeriodStart },
     endTime: { gte: now },
   },
+  include: { vehicle: true }
 });
         console.log(reservation ? `Reservation found for plate ${plateNumber}: ${reservation.id}` : `No reservation found for plate ${plateNumber}.`);
         // =======================
@@ -104,13 +105,13 @@ export const handleGateEntryRequest = async (job: Job) => {
                 
             } else {
                 console.log(`🅿️ Walk-in permit found for ${plateNumber}. Searching for a safe slot...`);
-                const { userId, vehicleId } = JSON.parse(permission);
+                const { userId, vehicleId,expectedExitTime } = JSON.parse(permission);
                 const safeSlot = await findSafeAlternativeSlot();
 
                 if (!safeSlot) {
                     reason = 'GARAGE_IS_FULL';
                 } else {
-                    await prisma.parkingSession.create({ data: { userId, vehicleId, slotId: safeSlot.id, entryTime: now, status: 'ACTIVE' } });
+                    await prisma.parkingSession.create({ data: { userId, vehicleId, slotId: safeSlot.id,expectedExitTime, entryTime: now, status: 'ACTIVE' } });
                     await ParkingSlot.updateOne({ _id: safeSlot.id }, { $set: { status: 'OCCUPIED' } });
                     await redis.del(`entry-permit:${plateNumber}`);
 

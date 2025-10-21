@@ -1,3 +1,5 @@
 export const GRACE_PERIOD :number = 30;
 export const CANCELLABLE_PERIOD_MINUTES :number= 60;
 export const GRACE_PERIOD_EARLY_ENTERANCE_MINUTES :number= 15;
+export const GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME :number= 10;
+export const MAX_ALLOWED_HOURS_TO_EXTEND_SESSION: number = 8;

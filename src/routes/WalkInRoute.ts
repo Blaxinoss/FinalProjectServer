@@ -11,10 +11,10 @@ const redis = await getRedisClient();
 
 router.post('/register', async (req, res) => {
   try {
-    const { uuid,name, phone, email,plateNumber} = req.body;
+    const { uuid,name, phone, email,plateNumber,expectedDurationMinutes} = req.body;
 
     // --- 🛡️ قسم التحقق من الصحة (Validation) ---
-    if (!plateNumber || !phone || !! uuid || !! name || !! email) {
+    if (!plateNumber || !phone || !! uuid || !! name || !! email || !expectedDurationMinutes) {
       return res.status(400).json({ error: 'missing data, more fields are required.' });
     }
     const phoneRegex = /^01[0125][0-9]{8}$/;
@@ -30,12 +30,18 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format.' });
     }
 
+    
+
   
     console.log(`Validation passed for plate: ${plateNumber}`);
 
     // --- 💾 قسم قاعدة البيانات (Prisma) ---
 
     // ابحث عن مستخدم بهذا الرقم.
+    const durationMs = parseInt(expectedDurationMinutes, 10) * 60 * 1000;
+    const expectedExitTime = new Date(Date.now() + durationMs);
+
+
     let user = await prisma.user.findUnique({ where: { phone:phone } });
 
     // إذا لم يكن المستخدم موجودًا، قم بإنشاء مستخدم "مؤقت" جديد.
@@ -72,7 +78,7 @@ router.post('/register', async (req, res) => {
     
     console.log(`Database records are ready for user: ${user.id} and vehicle: ${vehicle.id}`);
 
-    await redis.set(`entry-permit:${plateNumber}`, JSON.stringify({userId: user.id, vehicleId: vehicle.id}),'EX',900); // صلاحية 15 دقيقة
+    await redis.set(`entry-permit:${plateNumber}`, JSON.stringify({userId: user.id, vehicleId: vehicle.id,expectedExitTime: expectedExitTime.toISOString()}),'EX',900); // صلاحية 15 دقيقة
 
 
     // TODO: الخطوة التالية (النقطة الثالثة): التعامل مع Redis (المنطق الذكي)

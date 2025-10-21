@@ -4,9 +4,10 @@ import { getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js'; // Mongoose Model
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES } from '../../constants/constants.js';
 
-import {  Alert } from '../../mongo_Models/alert.js';
+import { Alert } from '../../mongo_Models/alert.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
-import { ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { ParkingSessionStatus, ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { ParkingEventQueue } from '../../queues/queues.js';
 /**
  * 🧠 يبحث عن مكان بديل آمن: متاح حاليًا (من MongoDB) وليس عليه حجوزات قريبة (من Prisma).
  * هذا هو المنطق الأساسي لمنع "الدوامة".
@@ -50,6 +51,14 @@ export async function findSafeAlternativeSlot() {
     return await prisma.parkingSlot.findUnique({ where: { id: safeSlotId } });
 }
 
+
+
+
+
+
+
+
+
 /**
  * ⚙️ ينفذ عملية متعددة الخطوات (غير قابلة للـ transaction) لتعيين مكان وبدء جلسة.
  * الأولوية لتسجيل البيانات في Prisma أولاً، ثم تحديث الحالة في MongoDB.
@@ -57,10 +66,32 @@ export async function findSafeAlternativeSlot() {
  * @param {object} slotToAssign - The prisma slot object to be assigned.
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function assignSlotAndStartSession(reservation:any, slotToAssign : any) {
+export async function assignSlotAndStartSession(reservation: any, slotToAssign: any) {
+
+
+
+    const now = new Date();
+    const delay = reservation.endTime.getTime() - now.getTime();
+    const exitJob = await ParkingEventQueue.add(
+        'check-session-expiry',
+        {
+            reservationId: reservation.id
+        },
+        {
+            delay: delay > 0 ? delay : 0 // تأكد من أن التأخير ليس سالبًا
+        }
+    );
+
     try {
+
+
+        if (!exitJob || !exitJob.id) {
+            throw new Error(`Failed to create exit check job for reservation ${reservation.id}`);
+        }
+
+
         // الخطوة 1: تسجيل العمليات الحرجة في قاعدة البيانات الأساسية (Prisma)
-        await prisma.$transaction([
+        const [updatedReservation, newSession] = await prisma.$transaction([
             prisma.reservation.update({
                 where: { id: reservation.id },
                 data: { status: 'FULFILLED', slotId: slotToAssign.id },
@@ -70,8 +101,13 @@ export async function assignSlotAndStartSession(reservation:any, slotToAssign : 
                     userId: reservation.userId,
                     vehicleId: reservation.vehicleId,
                     slotId: slotToAssign.id,
-                    entryTime: new Date(),
-                    status: 'ACTIVE',
+                    entryTime: now,
+                    expectedExitTime: reservation.endTime,
+                    exitCheckJobId: exitJob.id,
+                    overtimeStartTime: null,
+                    overtimeEndTime: null,
+                    isExtended: false,
+                    status:ParkingSessionStatus.ACTIVE,
                     reservationId: reservation.id,
                 },
             }),
@@ -80,12 +116,26 @@ export async function assignSlotAndStartSession(reservation:any, slotToAssign : 
         // الخطوة 2: تحديث الحالة في قاعدة البيانات اللحظية (MongoDB)
         await ParkingSlot.updateOne(
             { _id: slotToAssign.id },
-            { $set: { status: 'OCCUPIED' } }
+            {
+                $set: {
+                    status: SlotStatus.ASSIGNED, // ⬅️ الحالة الوسيطة الصحيحة
+                    current_vehicle: {
+                        plate_number: reservation.vehicle.plate, // اللوحة المتوقعة
+                        occupied_since: null,
+                        reservation_id: reservation.id.toString()
+                    }
+                }
+            }
         );
-        
+
+        await exitJob.updateData({
+            ...exitJob.data,
+            parkingSessionId: newSession.id
+        });
+
         return { success: true };
 
-    } catch (error:any) {
+    } catch (error: any) {
         // TODO: تسجيل تنبيه حرج هنا
         console.error(`CRITICAL: Failed during session creation for reservation ${reservation.id}. Error: ${error.message}`);
         const alert = await Alert.create({
@@ -95,6 +145,6 @@ export async function assignSlotAndStartSession(reservation:any, slotToAssign : 
         });
         console.log(`Alert created with ID: ${alert._id}`);
         // لا ترمي الخطأ للخارج لمنع إعادة المحاولة، ولكن أرجع فشلًا واضحًا
-        return { success: false, error: "Failed to start parking session.",alertId: alert._id };
+        return { success: false, error: "Failed to start parking session.", alertId: alert._id };
     }
 }
