@@ -4,7 +4,7 @@ import type { Request,Response } from "express";
 import { prisma } from "./routes.js";
 import { ParkingSessionStatus } from "../src/generated/prisma/index.js";
 import { getMaximumExtensionTime } from "../services/getMaximumExtensionTime.js";
-import { ParkingEventQueue } from "../queues/queues.js";
+import {  sessionLifecycleQueue } from "../queues/queues.js";
 const router = Router();
 
 
@@ -310,7 +310,7 @@ router.post('/:sessionId/extend', async (req, res) => {
         // (لو لقيتها، الغيها: await oldJob.remove())
         
     if (session.exitCheckJobId) { // تأكد إنه مش null
-            const oldJob = await ParkingEventQueue.getJob(session.exitCheckJobId); // ⬅️ 5. الاسم الصح
+            const oldJob = await sessionLifecycleQueue.getJob(session.exitCheckJobId); // ⬅️ 5. الاسم الصح
             if (oldJob) {
                 await oldJob.remove();
             }
@@ -322,7 +322,7 @@ router.post('/:sessionId/extend', async (req, res) => {
 
         
 
-        const newJob = await ParkingEventQueue.add(
+        const newJob = await sessionLifecycleQueue.add(
             'check-session-expiry',
             {
                 parkingSessionId: session.id

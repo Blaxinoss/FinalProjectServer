@@ -3,8 +3,8 @@ import { prisma } from "../../routes/routes.js";
 import { ParkingSessionStatus } from "../../src/generated/prisma/index.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } from "../../constants/constants.js";
-import { ParkingEventQueue } from "../../queues/queues.js";
 import { sendPushNotification } from "../../services/notifications.js";
+import { sessionLifecycleQueue } from "../../queues/queues.js";
 
 export const handleSessionExpiry = async (job: any) => {
 
@@ -50,7 +50,7 @@ console.warn(`Job ${job.id} ran, but session ${parkingSessionId} not found.`);
         sendPushNotification(session.userId, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
 
         // ب. إنشاء "المهمة المؤجلة الثانية" (جوب فترة السماح)
-        await ParkingEventQueue.add(
+        await sessionLifecycleQueue.add(
             'check-grace-period-expiry', // ⬅️ اسم مهمة جديد
             { parkingSessionId: session.id },
             { delay: GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } // ⬅️ هتشتغل بعد 10 دقايق

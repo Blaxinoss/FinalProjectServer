@@ -1,7 +1,7 @@
 import type { Job } from "bullmq";
 import deviceStatus from "../../mongo_Models/deviceStatus.js";
 
-export const HandleDeviceStatus = async (job: Job) => {
+export const handleDeviceStatus = async (job: Job) => {
     try {
         // 1. استخراج البيانات
         const { deviceId, status, lastSeen, cpuTemp } = job.data;

@@ -10,7 +10,7 @@ import { connectMySQL, getMySQLPool } from "./db&init/mysql.js";
 import { connectMQTT } from "./db&init/mqtt.js";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
-import { ParkingEventQueue } from "./queues/queues.js";
+import {gateQueue,paymentQueue,sessionLifecycleQueue,slotEventQueue,systemQueue } from "./queues/queues.js";
 import { ExpressAdapter } from "@bull-board/express";
 
 const app: Application = express();
@@ -33,7 +33,14 @@ const client = getRedisClient();
 
 
 createBullBoard({
-  queues: [new BullMQAdapter(ParkingEventQueue)],
+  queues: [new BullMQAdapter(systemQueue),
+    new BullMQAdapter(slotEventQueue),
+    new BullMQAdapter(paymentQueue),
+    new BullMQAdapter(gateQueue),
+        new BullMQAdapter(sessionLifecycleQueue)
+
+
+  ],
   serverAdapter,
 });
 

@@ -1,6 +1,6 @@
 import mqtt from "mqtt";
 import { config } from "../configs/index.js";
-import { ParkingEventQueue } from "../queues/queues.js";
+import { gateQueue, slotEventQueue, systemQueue } from "../queues/queues.js";
 
 let client: mqtt.MqttClient;
 let isSubscribed = false; // ⭐ علم للتأكد إننا عملنا subscribe مرة واحدة بس
@@ -30,26 +30,28 @@ export const connectMQTT = () => {
     }
   });
 
-  client.on("message", (topic, payload) => {
+  client.on("message", async(topic, payload) => {
     console.log(`📩 Message received on topic ${topic}`);
     const payloadStr = payload.toString();
     
     try {
       const parsed = JSON.parse(payloadStr);
       
-      if (topic.includes("raspberry-status")) {
-        console.log("🍓 RaspberryStatus message");
-        ParkingEventQueue.add("raspberry-status", parsed);
+     if (topic.includes("raspberry-status")) {
+  console.log("🍓 RaspberryStatus message -> system-queue");
+  // Add to system queue (if you created it)
+  await systemQueue.add("raspberry-status", parsed);
 
-      } else if (topic.includes("parking-event")) {
-        console.log("🚗 ParkingEvent message");
-        ParkingEventQueue.add("ParkingEvent", parsed);
+// } else if (topic.includes("parking-event")) {
+//   console.log("🚗 ParkingEvent message -> slot-event-queue");
+//   // Add to slot event queue
+//   await slotEventQueue.add("ParkingEvent", parsed);
 
-      } else if (topic === "garage/gate/entry/request") {
-        console.log("🚪 Gate Entry Request message");
-        ParkingEventQueue.add("gate-event-request", parsed);
-      }
-
+} else if (topic === "garage/gate/entry/request") {
+  console.log("🚪 Gate Entry Request message -> gate-queue");
+  // Add to gate queue
+  await gateQueue.add("gate-event-request", parsed);
+}
       
 
 

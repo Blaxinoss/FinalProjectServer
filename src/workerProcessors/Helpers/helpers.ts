@@ -7,7 +7,7 @@ import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES } from '../../constants/constants.
 import { Alert } from '../../mongo_Models/alert.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
 import { ParkingSessionStatus, ReservationsStatus } from '../../src/generated/prisma/index.js';
-import { ParkingEventQueue } from '../../queues/queues.js';
+import { sessionLifecycleQueue } from '../../queues/queues.js';
 /**
  * 🧠 يبحث عن مكان بديل آمن: متاح حاليًا (من MongoDB) وليس عليه حجوزات قريبة (من Prisma).
  * هذا هو المنطق الأساسي لمنع "الدوامة".
@@ -72,7 +72,7 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
 
     const now = new Date();
     const delay = reservation.endTime.getTime() - now.getTime();
-    const exitJob = await ParkingEventQueue.add(
+    const exitJob = await sessionLifecycleQueue.add(
         'check-session-expiry',
         {
             reservationId: reservation.id

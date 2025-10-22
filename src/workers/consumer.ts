@@ -1,136 +1,134 @@
+// consumer.ts OR workers/index.ts (main worker file)
+
 import { Job, Worker } from "bullmq";
-import { parkingEventProcessor } from "../workerProcessors/parkingEventProcessor.js";
-import { connection } from "../services/index.js";
+import { connection } from "../services/index.js"; // Your Redis connection
 import { mongoConnect } from "../db&init/mongo.js";
 import mqtt from "mqtt";
-
 import { config } from "../configs/index.js";
 
+// --- Import your actual processor functions ---
+// You need to create these files/functions based on our previous logic
+import { handleGateEntryRequest } from "../workerProcessors/gateProcessors/handleGateEventRequest.js";
+import { handleDeviceStatus } from "../workerProcessors/systemProcessors/deviceStatusHandlers.js";
+import {  handleGracePeriodExpiry } from "../workerProcessors/sessionProcessors/handleGracePeriodExpiry.js";
+import { handleSessionExpiry } from "../workerProcessors/sessionProcessors/handleSessionExpiry.js";
+// import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
+
+// --- Initialize DBs and MQTT ---
 await mongoConnect();
-const client = await mqtt.connect(config.mqttBroker, config.mqttOptions).on("connect", () => {
+const client = mqtt.connect(config.mqttBroker, config.mqttOptions);
+
+client.on("connect", () => {
     console.log("✅ MQTT connected successfully inside Worker");
+    // Subscribe to topics if needed within the worker itself
+    client.subscribe("garage/#"); // Example
+    console.log('📡 Subscribed to garage/# topic')
 });
 
+client.on("error", (err) => {
+    console.error("MQTT connection error in Worker:", err);
+});
+
+// Function to safely get MQTT client
 export const getMQTTClient_IN_WORKER = () => {
-  if (client) {
-    return client;
-  } else {
-    throw new Error(
-      "MQTT client not initialized.INside the worker Did you call connectMQTT() first?"
-    );
-  }
+    if (client && client.connected) {
+        return client;
+    } else {
+        // Consider attempting reconnection or throwing a more specific error
+        console.error("MQTT client not ready in Worker.");
+        // Returning client anyway, but caller should check .connected
+        return client;
+        // Or: throw new Error("MQTT client not connected in Worker.");
+    }
 };
 
+console.log("Initializing BullMQ Workers...");
 
-const parkingEventWorker = new Worker('ParkingEventQueue',parkingEventProcessor,{
+// --- Define Workers for each Queue with Priorities ---
+
+const gateWorker = new Worker('gate-queue', async (job: Job) => {
+    if (job.name === 'gate-event-request') {
+        return handleGateEntryRequest(job); // From gateProcessor.js
+    }
+    // Handle other job names if any in this queue
+}, {
     connection,
-    concurrency:1
-})
-
-parkingEventWorker.on('ready',()=>{
-    console.log('🚗 Parking Event Worker is ready and listening for jobs...');
-})
-
-parkingEventWorker.on("active", (job: Job) => {
-  console.log(`🚗 Parking Event worker started on job ${job?.id}`);
+    concurrency: 5, // Allow juggling multiple gate requests
 });
 
-parkingEventWorker.on("completed", (job: Job, res) => {
-  const duration =
-    job?.finishedOn && job?.processedOn
-      ? ((job.finishedOn - job.processedOn) / 1000).toFixed(2)
-      : "undefined";
-
-  console.log(
-    `✅ parking Event Worker finished job ${job.id} in ${duration !== "undefined" ? duration + "s" : "unknown time"} with result: ${res}`
-  );
+const slotEventWorker = new Worker('slot-event-queue', async (job: Job) => {
+    if (job.name === 'ParkingEvent') {
+        // return handleParkingEvent(job); // From slotEventProcessor.js
+    }
+    // Handle other job names if any
+}, {
+    connection,
+    concurrency: 5,
 });
 
-
-parkingEventWorker.on("failed", (job: Job | undefined, err: any) => {
-  console.error(`❌ Parking Event job ${job?.id} failed with error: ${err.message}`);
+const sessionLifecycleWorker = new Worker('session-lifecycle-queue', async (job: Job) => {
+    if (job.name === 'check-session-expiry') {
+        return handleSessionExpiry(job); // From sessionProcessor.js
+    } else if (job.name === 'check-grace-period-expiry') {
+        return handleGracePeriodExpiry(job); // From sessionProcessor.js
+    }
+    // Handle other job names if any
+}, {
+    connection,
+    concurrency: 5,
+    
 });
 
-parkingEventWorker.on("stalled", (jobId) => {
-  console.warn(`⚠️ Parking Event job ${jobId} got stalled!`);
+const paymentWorker = new Worker('payment-queue', async (job: Job) => {
+    // Assuming one job type for now
+    return handlePayment(job); // From paymentProcessor.js
+}, {
+    connection,
+    concurrency: 2, // Payment might involve external APIs, lower concurrency can be safer
 });
 
-parkingEventWorker.on("error", (err: any) => {
-  console.error(`🚨 Error connecting to the Parking Event Worker: ${err.message}`);
+const systemWorker = new Worker('system-queue', async (job: Job) => {
+    if (job.name === 'raspberry-status') {
+        return handleDeviceStatus(job); // From slotEventProcessor.js or a dedicated systemProcessor.js
+    }
+}, {
+    connection,
+    concurrency: 1, // System tasks might be less frequent
 });
 
+// --- Generic Event Listeners (Apply to all workers) ---
+const workers = [gateWorker, slotEventWorker, sessionLifecycleWorker, paymentWorker, systemWorker];
 
+workers.forEach(worker => {
+    worker.on('ready', () => {
+        console.log(`🚦 Worker [${worker.name}] is ready.`);
+    });
+    worker.on('active', (job) => {
+        console.log(`⚡ Worker [${worker.name}] started job ${job.id} (${job.name})`);
+    });
+    worker.on('completed', (job, result) => {
+        const duration = job?.finishedOn && job?.processedOn ? ((job.finishedOn - job.processedOn) / 1000).toFixed(2) : "?";
+        console.log(`✅ Worker [${worker.name}] finished job ${job.id} (${job.name}) in ${duration}s.`); // Result might be large, log selectively if needed
+    });
+    worker.on('failed', (job, err) => {
+        console.error(`❌ Worker [${worker.name}] failed job ${job?.id} (${job?.name}):`, err.message);
+    });
+    worker.on('error', err => {
+        console.error(`🚨 Worker [${worker.name}] reported an error:`, err.message);
+    });
+    worker.on('stalled', (jobId) => {
+        console.warn(`⚠️ Worker [${worker.name}] job ${jobId} stalled!`);
+    });
+});
 
+console.log("🚀 All workers initialized and listening...");
 
-
-
-// const paymentWorker = new Worker('PaymentQueue',paymentSessionProcessor,{
-//     connection,
-//     concurrency:1,
-// })
-
-
-// paymentWorker.on("active", (job: Job) => {
-//   console.log(`💰 Payment Worker started on job ${job?.id}`);
-// });
-
-// paymentWorker.on("completed", (job: Job, res) => {
-//   const duration =
-//     job?.finishedOn && job?.processedOn
-//       ? ((job.finishedOn - job.processedOn) / 1000).toFixed(2)
-//       : "undefined";
-
-//   console.log(
-//     `✅ payment Worker finished job ${job.id} in ${duration !== "undefined" ? duration + "s" : "unknown time"} with result: ${res}`
-//   );
-// });
-
-// paymentWorker.on("failed", (job: Job | undefined, err: any) => {
-//   console.error(`❌ Payment job ${job?.id} failed with error: ${err.message}`);
-// });
-
-// paymentWorker.on("stalled", (jobId) => {
-//   console.warn(`⚠️ Payment job ${jobId} got stalled!`);
-// });
-
-// paymentWorker.on("error", (err: any) => {
-//   console.error(`🚨 Error connecting to the Payment Worker: ${err.message}`);
-// });
-
-
-
-
-
-
-// const parkingSessionWorker = new Worker('ParkingSessionQueue',parkingSessionProcessor,{
-//     connection,
-//     concurrency:1
-// })
-
-// parkingSessionWorker.on("active", (job: Job) => {
-//   console.log(`🚗 Parking Session worker started on job ${job?.id}`);
-// });
-
-// parkingSessionWorker.on("completed", (job: Job, res) => {
-//   const duration =
-//     job?.finishedOn && job?.processedOn
-//       ? ((job.finishedOn - job.processedOn) / 1000).toFixed(2)
-//       : "undefined";
-
-//   console.log(
-//     `✅ parking Session Worker finished job ${job.id} in ${duration !== "undefined" ? duration + "s" : "unknown time"} with result: ${res}`
-//   );
-// });
-
-
-// parkingSessionWorker.on("failed", (job: Job | undefined, err: any) => {
-//   console.error(`❌ Parking Session job ${job?.id} failed with error: ${err.message}`);
-// });
-
-// parkingSessionWorker.on("stalled", (jobId) => {
-//   console.warn(`⚠️ Parking Session job ${jobId} got stalled!`);
-// });
-
-// parkingSessionWorker.on("error", (err: any) => {
-//   console.error(`🚨 Error connecting to the Parking Session Worker: ${err.message}`);
-// });
+// Keep the process alive (important for workers)
+process.on('SIGINT', async () => {
+    console.log('Shutting down workers...');
+    await Promise.all(workers.map(w => w.close()));
+    await client.endAsync(); // Close MQTT connection
+    await connection.quit(); // Close Redis connection
+    console.log('Workers shut down.');
+    process.exit(0);
+});
