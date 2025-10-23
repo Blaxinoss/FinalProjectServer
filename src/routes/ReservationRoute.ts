@@ -60,7 +60,8 @@ router.post("/", async (req: Request, res: Response) => {
     // ملاحظة: ParkingSlot هنا يجب أن يكون من Prisma وليس MongoDB
     const trulyFreeSlot = await prisma.parkingSlot.findFirst({
       where: {
-        id: { notIn: busySlotIds }
+        id: { notIn: busySlotIds },
+        type: {not:'EMERGENCY'}
       }
     });
 

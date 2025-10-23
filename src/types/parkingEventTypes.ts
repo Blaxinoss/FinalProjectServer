@@ -12,12 +12,13 @@ export enum SlotStatus {
   RESERVED = 'reserved',
   MAINTENANCE = 'maintenance',
   DISABLED = 'disabled',
+  CONFLICT = 'conflict',
   ASSIGNED = 'assigned'
 }
 
-enum ParkingSessionStatus{
-  ACTIVE = 'active',
-  COMPLETED= 'completed',
+export enum SlotType{
+   REGULAR = 'regular',
+  EMERGENCY= 'emergency',
 }
 
 
@@ -49,7 +50,9 @@ export enum AlertType {
   MAINTENANCE_NEEDED = 'maintenance_needed',
   CAMERA_OFFLINE = 'camera_offline',
   SUSPICIOUS_ACTIVITY = 'suspicious_activity',
-  SLOT_CONFLICT = 'slot_conflict'
+  SLOT_CONFLICT = 'slot_conflict',
+  NO_SHOW = 'no_show'
+
 }
 
 export enum AlertSeverity {

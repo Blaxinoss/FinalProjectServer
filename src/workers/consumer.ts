@@ -12,6 +12,7 @@ import { handleGateEntryRequest } from "../workerProcessors/gateProcessors/handl
 import { handleDeviceStatus } from "../workerProcessors/systemProcessors/deviceStatusHandlers.js";
 import {  handleGracePeriodExpiry } from "../workerProcessors/sessionProcessors/handleGracePeriodExpiry.js";
 import { handleSessionExpiry } from "../workerProcessors/sessionProcessors/handleSessionExpiry.js";
+import { handleSlotEvent } from "../workerProcessors/slotProcessors/handleSlotEvent.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
 
 // --- Initialize DBs and MQTT ---
@@ -57,8 +58,8 @@ const gateWorker = new Worker('gate-queue', async (job: Job) => {
 });
 
 const slotEventWorker = new Worker('slot-event-queue', async (job: Job) => {
-    if (job.name === 'ParkingEvent') {
-        // return handleParkingEvent(job); // From slotEventProcessor.js
+    if (job.name === 'slot-event') {
+        return handleSlotEvent(job)
     }
     // Handle other job names if any
 }, {
@@ -81,7 +82,7 @@ const sessionLifecycleWorker = new Worker('session-lifecycle-queue', async (job:
 
 const paymentWorker = new Worker('payment-queue', async (job: Job) => {
     // Assuming one job type for now
-    return handlePayment(job); // From paymentProcessor.js
+    // return handlePayment(job); // From paymentProcessor.js
 }, {
     connection,
     concurrency: 2, // Payment might involve external APIs, lower concurrency can be safer

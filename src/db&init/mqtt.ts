@@ -52,7 +52,11 @@ export const connectMQTT = () => {
   // Add to gate queue
   await gateQueue.add("gate-event-request", parsed);
 }
-      
+  else if (topic === "garage/slots/event"){
+    console.log("📍 Slot Event Request message -> slot-event-queue");
+    await slotEventQueue.add('slot-event',parsed,{priority: 3});
+  }
+        
 
 
     } catch (err: any) {

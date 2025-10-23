@@ -24,12 +24,18 @@ enum ReservationsStatus{
 enum ParkingSessionStatus{
   ACTIVE
   COMPLETED
+  CANCELLED
 }
 
 enum TransactionStatus{
   PENDING
   COMPLETED
   FAILED
+}
+
+enum SlotType {
+  REGULAR
+  EMERGENCY
 }
 
 model User {
@@ -52,6 +58,7 @@ model User {
 
 model ParkingSlot{
   id          String   @id @db.VarChar(20)
+  type        SlotType  @default(REGULAR)
 }
 
 model Vehicle {
@@ -95,10 +102,13 @@ model ParkingSession {
   entryTime          DateTime             @default(now())
   exitTime           DateTime?
   exitCheckJobId  String?              @db.VarChar(100)
+  occupancyCheckJobId  String?          @db.VarChar(100)
   isExtended        Boolean              @default(false)
   overtimeStartTime DateTime?
   overtimeEndTime   DateTime?
   expectedExitTime DateTime
+  notes             String?             @db.MediumText
+  involvedInConflict Boolean @default(false)
   paymentTransaction paymentTransaction[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt

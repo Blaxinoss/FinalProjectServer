@@ -12,50 +12,61 @@ import { sessionLifecycleQueue } from '../../queues/queues.js';
  * 🧠 يبحث عن مكان بديل آمن: متاح حاليًا (من MongoDB) وليس عليه حجوزات قريبة (من Prisma).
  * هذا هو المنطق الأساسي لمنع "الدوامة".
  * @returns {Promise<object|null>} - The full slot object from Prisma if a safe slot is found, otherwise null.
- */
-export async function findSafeAlternativeSlot() {
-    // 1. جلب كل الأماكن المتاحة "حاليًا" من المصدر السريع (MongoDB)
+ */export async function findSafeAlternativeSlot() {
+    // 1. جلب IDs المتاحة من MongoDB (زي ما هي)
     const availableMongoSlots = await ParkingSlot.find({ status: SlotStatus.AVAILABLE }).lean();
-    if (availableMongoSlots.length === 0) {
-        console.log("No slots are currently marked as AVAILABLE in MongoDB.");
-        return null;
-    }
+    if (availableMongoSlots.length === 0) return null;
     const availableSlotIds = availableMongoSlots.map(slot => slot._id.toString());
 
-    // 2. تحديد الفترة الزمنية الحرجة (حتى نهاية اليوم)
+    // ------------------------------------
+    // ⬇️ الخطوة الجديدة: فلترة النوع هنا ⬇️
+    // ------------------------------------
+    // 2. اسأل Prisma: مين من الأماكن المتاحة دي مش طوارئ؟
+    const candidateSlots = await prisma.parkingSlot.findMany({
+        where: {
+            id: { in: availableSlotIds },
+            type: { not: 'EMERGENCY' } // <-- ✅ الفلتر مكانه هنا
+        },
+        select: { id: true } // محتاجين الـ ID بس دلوقتي
+    });
+    const candidateSlotIds = candidateSlots.map(slot => slot.id);
+    if (candidateSlotIds.length === 0) {
+        console.log("Found available slots in Mongo, but none are non-emergency.");
+        return null; // مفيش مرشحين متاحين ومش طوارئ
+    }
+    // ------------------------------------
+    // ⬆️ نهاية الخطوة الجديدة ⬆️
+    // ------------------------------------
+
+
+    // 3. تحديد الفترة الزمنية (زي ما هي)
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    // 3. البحث في Prisma عن أي حجوزات مؤكدة قادمة على هذه الأماكن المتاحة
+    // 4. البحث عن حجوزات قادمة على الأماكن "المرشحة" فقط
     const upcomingReservations = await prisma.reservation.findMany({
         where: {
-            slotId: { in: availableSlotIds },
+            slotId: { in: candidateSlotIds }, // <-- استخدم IDs المرشحين
             status: ReservationsStatus.CONFIRMED,
-            startTime: { lte: endOfDay } // أي حجز سيبدأ قبل نهاية اليوم
+            startTime: { lte: endOfDay }
         },
         select: { slotId: true }
     });
-
     const reservedSlotIds = new Set(upcomingReservations.map(res => res.slotId));
 
-    // 4. إيجاد أول ID لمكان متاح وغير محجوز في المستقبل القريب
-    const safeSlotId = availableSlotIds.find(id => !reservedSlotIds.has(id));
+    // 5. إيجاد أول ID "مرشح" وغير محجوز
+    const safeSlotId = candidateSlotIds.find(id => !reservedSlotIds.has(id)); // <-- ابحث في المرشحين
 
     if (!safeSlotId) {
-        console.log("Found available slots in Mongo, but all have upcoming reservations today.");
+        console.log("Found available, non-emergency slots, but all have upcoming reservations.");
         return null;
     }
 
-    // 5. جلب البيانات الهيكلية الكاملة للمكان الآمن من Prisma
+    // 6. جلب بيانات المكان الآمن النهائية (بدون فلتر نوع هنا)
     console.log(`Found a safe alternative slot. ID: ${safeSlotId}`);
-    return await prisma.parkingSlot.findUnique({ where: { id: safeSlotId } });
+    // <-- ❌ متشيلش الفلتر من هنا، سيبه زي ما كان في findUnique
+    return await prisma.parkingSlot.findUnique({ where: { id: safeSlotId } }); // <-- ✅ متشيلش الفلتر من هنا
 }
-
-
-
-
-
-
 
 
 

@@ -5,6 +5,7 @@ import { prisma } from "./routes.js";
 import { ParkingSessionStatus } from "../src/generated/prisma/index.js";
 import { getMaximumExtensionTime } from "../services/getMaximumExtensionTime.js";
 import {  sessionLifecycleQueue } from "../queues/queues.js";
+import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../constants/constants.js";
 const router = Router();
 
 
@@ -322,7 +323,7 @@ router.post('/:sessionId/extend', async (req, res) => {
 
         
 
-        const newJob = await sessionLifecycleQueue.add(
+        const checkSessionExpireJOB = await sessionLifecycleQueue.add(
             'check-session-expiry',
             {
                 parkingSessionId: session.id
@@ -331,11 +332,11 @@ router.post('/:sessionId/extend', async (req, res) => {
                 delay: newExpectedExitTime.getTime() - Date.now()
             }
         );
-        
+
         // --- 6. تحديث قاعدة البيانات (Prisma) ---
         // (هنا هتجمع كل التحديثات)
         dataToUpdate.expectedExitTime = newExpectedExitTime
-        dataToUpdate.exitCheckJobId = newJob.id
+        dataToUpdate.exitCheckJobId = checkSessionExpireJOB.id
         dataToUpdate.isExtended = true
 
         // (اعمل update للـ ParkingSession باستخدام الـ dataToUpdate)
