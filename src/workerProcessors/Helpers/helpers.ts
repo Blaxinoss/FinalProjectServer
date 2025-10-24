@@ -2,7 +2,7 @@ import { Job } from 'bullmq';
 import { prisma } from '../../routes/routes.js';
 import { getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js'; // Mongoose Model
-import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES } from '../../constants/constants.js';
+import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
 
 import { Alert } from '../../mongo_Models/alert.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
@@ -93,10 +93,16 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
         }
     );
 
+    const occupancyCheckJob = await sessionLifecycleQueue.add(
+        'check-actual-occupancy',
+        { reservationId: reservation.id }, // سنحتاج لتحديثه بالـ sessionId
+        { delay: OCCUPANCY_CHECK_DELAY_AFTER_ENTRY }
+    );
+
     try {
 
 
-        if (!exitJob || !exitJob.id) {
+        if (!exitJob || !exitJob.id || !occupancyCheckJob.id) {
             throw new Error(`Failed to create exit check job for reservation ${reservation.id}`);
         }
 
@@ -117,6 +123,7 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
                     exitCheckJobId: exitJob.id,
                     overtimeStartTime: null,
                     overtimeEndTime: null,
+                    occupancyCheckJobId:occupancyCheckJob.id,
                     isExtended: false,
                     status:ParkingSessionStatus.ACTIVE,
                     reservationId: reservation.id,
@@ -144,6 +151,8 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
             parkingSessionId: newSession.id
         });
 
+        await occupancyCheckJob.updateData({ ...occupancyCheckJob.data, parkingSessionId: newSession.id }); // ⬅️ تحديث الجوب الجديدة أيضًا
+
         return { success: true };
 
     } catch (error: any) {
@@ -154,6 +163,8 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
             message: `Failed to start parking session for reservation ${reservation.id}. Manual intervention may be required.`,
             timestamp: new Date(),
         });
+        await exitJob.remove();
+        await occupancyCheckJob.remove(); 
         console.log(`Alert created with ID: ${alert._id}`);
         // لا ترمي الخطأ للخارج لمنع إعادة المحاولة، ولكن أرجع فشلًا واضحًا
         return { success: false, error: "Failed to start parking session.", alertId: alert._id };

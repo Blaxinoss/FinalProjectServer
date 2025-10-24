@@ -2,12 +2,13 @@ import { Job } from 'bullmq';
 import { prisma } from '../../routes/routes.js';
 import { connectRedis, getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js';
-import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES } from '../../constants/constants.js';
+import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
 import { getMQTTClient } from '../../db&init/mqtt.js'; // Ensure this is imported
 import { SlotStatus } from '../../types/parkingEventTypes.js';
 import { assignSlotAndStartSession, findSafeAlternativeSlot } from '../Helpers/helpers.js';
 import { getMQTTClient_IN_WORKER } from '../../workers/consumer.js';
 import { ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
 
 
@@ -77,6 +78,7 @@ export const handleGateEntryRequest = async (job: Job) => {
 
                 if (alternativeSlot) {
                     await assignSlotAndStartSession(reservation, alternativeSlot);
+                    
                     console.log(`✅ Stacked reservation relocated. Vehicle ${plateNumber} assigned to alternative slot ${alternativeSlot.id}.`);
                     // ✅ تعيين القرار بالنجاح مع مكان بديل
                     decision = 'ALLOW_ENTRY';
@@ -106,13 +108,56 @@ export const handleGateEntryRequest = async (job: Job) => {
             } else {
                 console.log(`🅿️ Walk-in permit found for ${plateNumber}. Searching for a safe slot...`);
                 const { userId, vehicleId,expectedExitTime } = JSON.parse(permission);
+                const expectedExitTimeDate = new Date(expectedExitTime); // Convert string to Date
                 const safeSlot = await findSafeAlternativeSlot();
 
                 if (!safeSlot) {
                     reason = 'GARAGE_IS_FULL';
+                    message = 'Sorry, the garage is currently full.'; // Add message for this case
                 } else {
-                    await prisma.parkingSession.create({ data: { userId, vehicleId, slotId: safeSlot.id,expectedExitTime, entryTime: now, status: 'ACTIVE' } });
-                    await ParkingSlot.updateOne({ _id: safeSlot.id }, { $set: { status: 'OCCUPIED' } });
+                    
+
+                    const now = new Date(); // Get current time precisely here
+            const exitDelay = expectedExitTimeDate.getTime() - now.getTime();
+            const occupancyCheckDelay = OCCUPANCY_CHECK_DELAY_AFTER_ENTRY; // Use constant
+
+            // 2. Create Delayed Jobs
+            const exitJob = await sessionLifecycleQueue.add(
+                'check-session-expiry',
+                { vehicleId }, // Initial data, will update with sessionId
+                { delay: exitDelay > 0 ? exitDelay : 0 }
+            );
+
+            const occupancyCheckJob = await sessionLifecycleQueue.add(
+                'check-actual-occupancy',
+                { vehicleId }, // Initial data, will update with sessionId
+                { delay: occupancyCheckDelay }
+            );
+
+            if (!exitJob?.id || !occupancyCheckJob?.id) {
+                // Attempt to remove jobs if one failed
+                if(exitJob) await exitJob.remove();
+                if(occupancyCheckJob) await occupancyCheckJob.remove();
+                throw new Error('Failed to create necessary session jobs for walk-in.');
+            }
+
+                    const newSession = await prisma.parkingSession.create({ data:
+                         { userId, vehicleId, slotId: safeSlot.id,expectedExitTime, 
+                            entryTime: now,exitCheckJobId:exitJob.id,
+                            occupancyCheckJobId:occupancyCheckJob.id, status: 'ACTIVE' } });
+                    
+                    // 4. Update Jobs with Session ID
+            await exitJob.updateData({ ...exitJob.data, parkingSessionId: newSession.id });
+            await occupancyCheckJob.updateData({ ...occupancyCheckJob.data, parkingSessionId: newSession.id });
+
+                    await ParkingSlot.updateOne({ _id: safeSlot.id }, { $set: { status: SlotStatus.ASSIGNED ,current_vehicle:{
+                        plateNumber,
+                        occupied_since:null,
+                        reservation_id:null,
+
+                    }} ,
+                    // Optional: $inc stats.total_uses_today if assignment counts
+                });
                     await redis.del(`entry-permit:${plateNumber}`);
 
                     // ✅ تعيين القرار بالنجاح للـ Walk-in
@@ -130,7 +175,7 @@ export const handleGateEntryRequest = async (job: Job) => {
         console.error(`❌ CRITICAL ERROR in job ${job.id}: ${error.message}`);
         reason = 'INTERNAL_SERVER_ERROR'; // decision يبقى على قيمته الافتراضية 'DENY_ENTRY'
         jobStatus = { success: false, error: error.message };
-    
+        
     } finally {
         // 2. إرسال القرار النهائي عبر MQTT
         // هذا الجزء سيعمل دائمًا، سواء نجحت العملية أو فشلت

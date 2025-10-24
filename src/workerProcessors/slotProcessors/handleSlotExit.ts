@@ -78,9 +78,9 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
         // This is problematic - slot was occupied/conflicted but no active session found.
         console.error(`CRITICAL: No active session found for exit from slot ${slot_id} (Status: ${leavingSlot.status}, Plate: ${leavingSlot.current_vehicle?.plate_number}). Clearing slot, but billing may fail.`);
         await Alert.create({
-            type: AlertType.VIOLATION,
+            alert_type: AlertType.VIOLATION,
             title: 'Session Not Found on Exit',
-            message: `Could not find active session for vehicle ${leavingSlot.current_vehicle?.plate_number} exiting slot ${slot_id} (status ${leavingSlot.status}). Billing failed.`,
+            description: `Could not find active session for vehicle ${leavingSlot.current_vehicle?.plate_number} exiting slot ${slot_id} (status ${leavingSlot.status}). Billing failed.`,
             severity: AlertSeverity.HIGH,
             timestamp: eventTimestamp,
             details: { slotId: slot_id, plateNumber: leavingSlot.current_vehicle?.plate_number, slotStatus: leavingSlot.status }

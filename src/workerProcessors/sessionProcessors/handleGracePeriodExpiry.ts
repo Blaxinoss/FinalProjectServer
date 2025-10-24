@@ -73,11 +73,11 @@ if (slotStatus?.status !== SlotStatus.OCCUPIED) {
             });
 
             // 2. إرسال تنبيه فوري للمستخدم
-            await sendPushNotification(
-                session.userId,
-                "‼️ Penalty Time Started",
-                "Your grace period has ended, and penalty time has started for your parking session."
-            );
+            // await sendPushNotification(
+            //     session.userId,
+            //     "‼️ Penalty Time Started",
+            //     "Your grace period has ended, and penalty time has started for your parking session."
+            // );
 
             // 3. (اختياري) إرسال تنبيه للداش بورد
             await Alert.create({

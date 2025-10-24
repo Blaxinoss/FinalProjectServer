@@ -25,7 +25,10 @@ console.warn(`Job ${job.id} ran, but session ${parkingSessionId} not found.`);
 
 
        const slotStatus = await ParkingSlot.findById(session.slotId).select('status').lean();
-
+    if(!slotStatus){
+        console.log(`couldn't find a slot with this id`)
+        throw new Error('Couldn\'t find a slot with this id')
+    }
     
     if (slotStatus?.status === SlotStatus.AVAILABLE) {
         // (ده منطق "التصحيح الذاتي" بتاعك، وهو ممتاز)
@@ -47,7 +50,7 @@ console.warn(`Job ${job.id} ran, but session ${parkingSessionId} not found.`);
         console.log(`Job ${job.id}: Session ${session.id} expired. Slot ${session.slotId} is still OCCUPIED. Starting grace period.`);
 
         // أ. أرسل تنبيه للمستخدم (زي ما أنت عملت)
-        sendPushNotification(session.userId, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
+        // sendPushNotification(session.userId, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
 
         // ب. إنشاء "المهمة المؤجلة الثانية" (جوب فترة السماح)
         await sessionLifecycleQueue.add(
