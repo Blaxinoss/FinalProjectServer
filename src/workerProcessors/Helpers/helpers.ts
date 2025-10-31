@@ -6,7 +6,7 @@ import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY
 
 import { Alert } from '../../mongo_Models/alert.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
-import { ParkingSessionStatus, ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { ParkingSessionStatus, ReservationsStatus, type Reservation } from '../../src/generated/prisma/index.js';
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 /**
  * 🧠 يبحث عن مكان بديل آمن: متاح حاليًا (من MongoDB) وليس عليه حجوزات قريبة (من Prisma).
@@ -101,10 +101,12 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
 
     try {
 
+        
 
         if (!exitJob || !exitJob.id || !occupancyCheckJob.id) {
             throw new Error(`Failed to create exit check job for reservation ${reservation.id}`);
         }
+
 
 
         // الخطوة 1: تسجيل العمليات الحرجة في قاعدة البيانات الأساسية (Prisma)
@@ -121,6 +123,8 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
                     entryTime: now,
                     expectedExitTime: reservation.endTime,
                     exitCheckJobId: exitJob.id,
+                    paymentIntentId:reservation.paymentIntentId,
+                    paymentType : reservation.paymentType,
                     overtimeStartTime: null,
                     overtimeEndTime: null,
                     occupancyCheckJobId:occupancyCheckJob.id,

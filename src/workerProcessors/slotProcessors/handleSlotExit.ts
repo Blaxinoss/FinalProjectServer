@@ -5,6 +5,7 @@ import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTy
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Import queue
 import { paymentQueue } from "../../queues/queues.js"; // Import payment queue
 import { Alert } from "../../mongo_Models/alert.js";
+import { calculateBill } from "../Helpers/Bills.js";
 // Function to calculate bill (needs implementation)
 // import { calculateBill } from "../services/billingService.js";
 
@@ -48,6 +49,18 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
         } else {
              console.warn(`Could not find vehicle with plate ${plateNumber} for conflicted slot exit.`);
              // Alert might be needed
+               await Alert.create({
+                alert_type: AlertType.SUSPICIOUS_ACTIVITY,
+                title: 'Leaving car without A session',
+                description: `Vehicle [${plateNumber}] is leaving  slot [${slot_id}] and he has no parking session avilable`,
+                severity: AlertSeverity.HIGH,
+                timestamp: eventTimestamp,
+                details: {
+                    slotId: slot_id,
+                    detectedPlate: plateNumber,
+                }
+            });
+
         }
     }
     // Case B: Slot was OCCUPIED (Normal Exit) or ASSIGNED (User left before occupying - less likely but possible)
@@ -119,20 +132,25 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
             // Clear job IDs just in case
             exitCheckJobId: null,
             occupancyCheckJobId: null
-        }
+        },
+        include:{vehicle:true}
     });
-
-    // --- 6. Calculate Bill & Add Payment Job ---
-    // const billAmount = calculateBill(closedSession); // Implement this function based on rates and overtime fields
-    // console.log(`Calculated bill for session ${closedSession.id}: ${billAmount}`);
-    // await paymentQueue.add('process-payment', {
-    //     sessionId: closedSession.id,
-    //     amount: billAmount,
-    //     userId: closedSession.userId,
-    //     plateNumber: closedSession.vehicle.plate
-    //     // Add other necessary payment details
-    // }, { priority: 7 }); // Example priority
-
+    
+    try{
+        // --- 6. Calculate Bill & Add Payment Job ---
+        const billAmount = calculateBill(closedSession); // Implement this function based on rates and overtime fields
+        console.log(`Calculated bill for session ${closedSession.id}: ${billAmount}`);
+        await paymentQueue.add('process-payment', {
+            sessionId: closedSession.id,
+            amount: billAmount,
+            userId: closedSession.userId,
+            plateNumber: closedSession.vehicle.plate,
+            // Add other necessary payment details
+        }, { priority: 7 }); // Example priority
+    }
+    catch(err:any){
+        console.log(`couldn't complete the billing phase ${err.message}`)
+    }
 
     // --- 7. Clear the Slot in MongoDB ---
     await ParkingSlot.updateOne(

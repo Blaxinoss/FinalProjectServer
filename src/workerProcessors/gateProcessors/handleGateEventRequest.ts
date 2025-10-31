@@ -3,11 +3,10 @@ import { prisma } from '../../routes/routes.js';
 import { connectRedis, getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js';
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
-import { getMQTTClient } from '../../db&init/mqtt.js'; // Ensure this is imported
 import { SlotStatus } from '../../types/parkingEventTypes.js';
 import { assignSlotAndStartSession, findSafeAlternativeSlot } from '../Helpers/helpers.js';
 import { getMQTTClient_IN_WORKER } from '../../workers/consumer.js';
-import { ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from '../../src/generated/prisma/index.js';
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
 
@@ -61,7 +60,7 @@ export const handleGateEntryRequest = async (job: Job) => {
             const designatedSlotStatus = await ParkingSlot.findById(reservation.slotId).select('status').lean();
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
 
-
+            
             if (designatedSlotStatus?.status === SlotStatus.AVAILABLE) {
                 const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
                 await assignSlotAndStartSession(reservation, designatedSlot);
@@ -107,7 +106,7 @@ export const handleGateEntryRequest = async (job: Job) => {
                 
             } else {
                 console.log(`🅿️ Walk-in permit found for ${plateNumber}. Searching for a safe slot...`);
-                const { userId, vehicleId,expectedExitTime } = JSON.parse(permission);
+                const { userId, vehicleId,expectedExitTime,paymentTypeDecision,paymentIntentId } = JSON.parse(permission);
                 const expectedExitTimeDate = new Date(expectedExitTime); // Convert string to Date
                 const safeSlot = await findSafeAlternativeSlot();
 
@@ -141,10 +140,20 @@ export const handleGateEntryRequest = async (job: Job) => {
                 throw new Error('Failed to create necessary session jobs for walk-in.');
             }
 
+            if(paymentTypeDecision === paymentMethod.CARD && !paymentIntentId) {
+                // Attempt to remove jobs if one failed
+                if(exitJob) await exitJob.remove();
+                if(occupancyCheckJob) await occupancyCheckJob.remove();
+                throw new Error('payment should be with cart and there is not payment Id in the redis permission.');
+            }
+
                     const newSession = await prisma.parkingSession.create({ data:
                          { userId, vehicleId, slotId: safeSlot.id,expectedExitTime, 
                             entryTime: now,exitCheckJobId:exitJob.id,
-                            occupancyCheckJobId:occupancyCheckJob.id, status: 'ACTIVE' } });
+                            occupancyCheckJobId:occupancyCheckJob.id, status: ParkingSessionStatus.ACTIVE,
+                            paymentType:paymentTypeDecision,
+                            paymentIntentId,
+                        } });
                     
                     // 4. Update Jobs with Session ID
             await exitJob.updateData({ ...exitJob.data, parkingSessionId: newSession.id });

@@ -5,11 +5,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "prisma":{
+  "prisma": {
     "seed": "ts-node prisma/seed.ts"
-
   },
-  
   "keywords": [],
   "author": "",
   "type": "module",
@@ -36,7 +34,9 @@
     "prisma": "^6.16.2",
     "prom-client": "^15.1.3",
     "redis": "^5.8.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "stripe": "^19.2.0",
+    "twilio": "^5.10.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

@@ -31,12 +31,21 @@ enum TransactionStatus{
   PENDING
   COMPLETED
   FAILED
+  UNPAID_EXIT
 }
 
 enum SlotType {
   REGULAR
   EMERGENCY
 }
+
+enum paymentMethod{
+  CASH
+  CARD
+  APPLICATION
+  OTHER
+}
+
 
 model User {
   id              Int              @id @default(autoincrement())
@@ -48,6 +57,7 @@ model User {
   NationalID      String           @unique @db.VarChar(20)
   address         String           @db.VarChar(255)
   licenseNumber   String           @unique @db.VarChar(50)
+paymentGatewayToken String? @unique @db.VarChar(255)
   licenseExpiry   DateTime
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -70,6 +80,7 @@ model Vehicle {
   createdAt       DateTime         @default(now())
   //status: parked, exited
   updatedAt       DateTime         @updatedAt
+  hasOutstandingDebt Boolean       @default(false)
   ParkingSessions ParkingSession[]
   reservations    Reservation[]
 }
@@ -84,6 +95,8 @@ model Reservation {
   slotId String @db.VarChar(20)
   startTime DateTime 
   endTime DateTime
+  paymentType paymentMethod?
+  paymentIntentId String?  @unique
   isStacked Boolean @default(false)
   status ReservationsStatus  @default(CONFIRMED)
   createdAt DateTime @default(now())
@@ -103,6 +116,8 @@ model ParkingSession {
   exitTime           DateTime?
   exitCheckJobId  String?              @db.VarChar(100)
   occupancyCheckJobId  String?          @db.VarChar(100)
+  paymentType paymentMethod?
+  paymentIntentId String?  @unique
   isExtended        Boolean              @default(false)
   overtimeStartTime DateTime?
   overtimeEndTime   DateTime?
@@ -121,8 +136,8 @@ model paymentTransaction {
   parkingSessionId  Int
   parkingSession    ParkingSession @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
   amount            Float          @db.Double
-  paymentMethod     String         @db.VarChar(50) // cash, card, mobile
-  paidAt            DateTime       @default(now())
+  paymentMethod     paymentMethod?
+  paidAt            DateTime? 
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   transactionStatus TransactionStatus         @default(PENDING)// completed, failed, pending

@@ -16,10 +16,7 @@ export enum SlotStatus {
   ASSIGNED = 'assigned'
 }
 
-export enum SlotType{
-   REGULAR = 'regular',
-  EMERGENCY= 'emergency',
-}
+
 
 
 export enum LightingCondition {
@@ -51,8 +48,8 @@ export enum AlertType {
   CAMERA_OFFLINE = 'camera_offline',
   SUSPICIOUS_ACTIVITY = 'suspicious_activity',
   SLOT_CONFLICT = 'slot_conflict',
-  NO_SHOW = 'no_show'
-
+  NO_SHOW = 'no_show',
+  PAYMENT_HELP_REQUEST = 'payment_help_request',
 }
 
 export enum AlertSeverity {

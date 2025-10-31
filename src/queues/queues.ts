@@ -27,8 +27,8 @@ export const systemQueue = new Queue('system-queue', {
 export const paymentQueue = new Queue('payment-queue', { // Renamed PaymentQueue to paymentQueue
     connection,
     defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 3000 },
+        // attempts: 5,
+        // backoff: { type: 'exponential', delay: 3000 },
         removeOnComplete: 10,
         removeOnFail: 100,
     }
