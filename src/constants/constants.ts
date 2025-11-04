@@ -15,4 +15,4 @@ export const REGULAR_RATE_PER_MINUTE = 0.5; // EGP per minute
 export const PENALTY_RATE_PER_MINUTE = 1.0; // EGP per minute (Higher rate)
 export const CONFLICT_FEE = 20.0; // EGP fixed fee for causing conflict
 export const MINIMUM_CHARGE = 5.0; // EGP minimum charge for any session
-export const HOLDAMOUNT_WHILE_RESERVATIONS = 2000;
+export const HOLDAMOUNT_WHILE_RESERVATIONS = 10000;

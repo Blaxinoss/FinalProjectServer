@@ -24,12 +24,14 @@ app.use("/api", routes);
 
 await mongoConnect();
 await connectMySQL();
-const pool = getMySQLPool();
+const pool = await getMySQLPool();
 
-const mqttClient = connectMQTT();
-const redisClient = connectRedis();
-const client = getRedisClient();
+const mqttClient = await connectMQTT();
+const redisClient = await connectRedis();
+const client = await getRedisClient();
 
+import router from "./routes/WalkInRoute.js";
+app.use('/api/walk-in',router)
 
 
 createBullBoard({

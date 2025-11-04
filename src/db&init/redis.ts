@@ -3,7 +3,7 @@ import { config } from "../configs/index.js";
 
 let redisClient: Redis.Redis | null = null;
 
-export const connectRedis = () => {
+export const connectRedis = async() => {
     if (redisClient) return redisClient;
     redisClient = new Redis.Redis({ host: config.redis.host, port: config.redis.port });
 
@@ -16,7 +16,7 @@ export const connectRedis = () => {
     return redisClient;
 };
 
-export const getRedisClient = () => {
+export const getRedisClient = async() => {
     if (!redisClient) throw new Error("Redis not initialized");
     return redisClient;
 };

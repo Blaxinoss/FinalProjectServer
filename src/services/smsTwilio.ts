@@ -23,7 +23,7 @@ export const sendSmsNotification = async (phoneNumber: string | undefined, messa
         await client.messages.create({
             body: message,
             from: process.env.TWILIO_PHONE_NUMBER, // رقمك من Twilio
-            to: phoneNumber // لازم يكون بالصيغة الدولية (+20...)
+            to: `+201140171455` // لازم يكون بالصيغة الدولية (+20...)
         });
         console.log(`SMS sent successfully to ${phoneNumber}`);
     } catch (error: any) {

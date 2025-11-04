@@ -15,6 +15,7 @@ export const handlePayment = async (job: Job) => {
         console.log(`data missing while running job ${job.id}`)
         throw (`data is missing for the payment worker on job ${job.id}`)
     }
+    
 
     const session: ParkingSession = await prisma.parkingSession.findUniqueOrThrow({
         where: { id: sessionId }
@@ -59,7 +60,7 @@ export const handlePayment = async (job: Job) => {
 
             }
         })
-
+        console.log(`cash alert was created for job ${job.id}`)
         return `CASH payment pending. Alert sent.`;
     }
 
@@ -149,7 +150,7 @@ export const handlePayment = async (job: Job) => {
                 if (session.reservationId) {
                 //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
 
-
+                    console.log('sending application notification')
                 await sendPushNotification(user.id,
                     `Payment Failed for session ${sessionId}`,
                 `We couldn't charge your card for ${amount/100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
@@ -168,6 +169,8 @@ export const handlePayment = async (job: Job) => {
 
                     }
                 })
+                                    console.log('sending sms notification')
+
                 await sendSmsNotification(user.phone, `we apologize but your payment has failed an alert has been fired and someone is on his way to you to collect 
                     the money on cash,but the gate will still be oppened ${Checkoutsession.url
                     }`)
@@ -186,7 +189,7 @@ export const handlePayment = async (job: Job) => {
                 where: { id: paymentTransaction.id },
                 data: { transactionStatus: TransactionStatus.FAILED }
             });
-throw new Error(`Unknown payment method: ${session.paymentType}`); // ⬅️ استخدم paymentMethod
+console.log(`Unknown payment method: ${session.paymentType}`); // ⬅️ استخدم paymentMethod
 }
 
 

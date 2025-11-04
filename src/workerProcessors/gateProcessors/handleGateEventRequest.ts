@@ -160,7 +160,7 @@ export const handleGateEntryRequest = async (job: Job) => {
             await occupancyCheckJob.updateData({ ...occupancyCheckJob.data, parkingSessionId: newSession.id });
 
                     await ParkingSlot.updateOne({ _id: safeSlot.id }, { $set: { status: SlotStatus.ASSIGNED ,current_vehicle:{
-                        plateNumber,
+                        plate_number:plateNumber,
                         occupied_since:null,
                         reservation_id:null,
 

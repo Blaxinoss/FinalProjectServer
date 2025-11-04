@@ -7,7 +7,6 @@ import { HOLDAMOUNT_WHILE_RESERVATIONS } from '../constants/constants.js';
 import { paymentMethod } from '../src/generated/prisma/index.js';
 
 const router = Router();
-const redis = await getRedisClient();
 
 // داخل ملف walkInRoutes.ts
 
@@ -16,7 +15,7 @@ const redis = await getRedisClient();
 router.post('/register', async (req, res) => {
   try {
     const { uuid,name, phone, email,plateNumber,expectedDurationMinutes,licenseExpiry,paymentMethodId , paymentTypeDecision} = req.body;
-
+ const redis = await getRedisClient();
     // --- 🛡️ قسم التحقق من الصحة (Validation) ---
  if (!plateNumber || !phone || !uuid || !name || !email || !expectedDurationMinutes || !paymentTypeDecision ) {
       return res.status(400).json({ error: 'Missing data, all fields are required.' });
@@ -109,6 +108,7 @@ await prisma.user.update({
         amount: HOLDAMOUNT_WHILE_RESERVATIONS, // مثلاً 20 جنيه
         currency: 'egp',
         customer: customer.id,
+            payment_method: paymentMethodId, 
         capture_method: 'manual', // ⬅️ هولد فقط
         confirm: true,
         off_session: true,
@@ -142,3 +142,5 @@ await prisma.user.update({
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+export default router;

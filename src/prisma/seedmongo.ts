@@ -44,44 +44,30 @@ ParkingSlotSchema.index({ 'current_vehicle.plate_number': 1 });
 const ParkingSlot: Model<IParkingSlot> = mongoose.models.ParkingSlot || mongoose.model<IParkingSlot>("ParkingSlot", ParkingSlotSchema);
 // --- Connection Details ---
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/garage'; // Use your DB name
-
 async function seedMongo() {
-    console.log('🌱 Starting MongoDB seeding...');
+    console.log('🌱 Starting MongoDB seeding (Clean State)...');
     await mongoose.connect(MONGO_URI);
-    console.log('🔌 Connected to MongoDB.');
+    console.log('🧹 Clearing old slot statuses...');
+    await ParkingSlot.deleteMany({});
 
-    try {
-        console.log('🧹 Clearing old slot statuses...');
-        await ParkingSlot.deleteMany({});
+    const defaultState = {
+        status: SlotStatus.AVAILABLE,
+        current_vehicle: null,
+        conflict_details: null,
+        violating_vehicle: null,
+        stats: { total_uses_today: 0 }
+    };
 
-        const now = Date.now();
-        const defaultStats = { total_uses_today: 0 }; // Simplified default stats
+    const slotsToCreate = [
+        { _id: 'A-01', ...defaultState },
+        { _id: 'A-02', ...defaultState },
+        { _id: 'B-01', ...defaultState },
+        { _id: 'EMG-01', ...defaultState },
+    ];
 
-        const slotsToCreate = [
-            { _id: 'A-01', status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null, stats: defaultStats },
-            { _id: 'A-02', status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null, stats: defaultStats },
-            {
-                _id: 'B-01', status: SlotStatus.OCCUPIED,
-                current_vehicle: { plate_number: 'ن ن ن 333', occupied_since: new Date(now - 15 * 60000) },
-                conflict_details: null, violating_vehicle: null, stats: defaultStats
-            },
-            { _id: 'B-02', status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null, stats: defaultStats },
-            { _id: 'C-01', status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null, stats: defaultStats },
-            { _id: 'EMG-01', status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null, stats: defaultStats },
-        ];
-
-        console.log('🅿️ Inserting initial slot statuses...');
-        // Using create instead of insertMany to better handle defaults if schema changes
-        await ParkingSlot.create(slotsToCreate);
-
-        console.log('✅ MongoDB seeding finished successfully!');
-
-    } catch (error) {
-        console.error('❌ An error occurred while seeding MongoDB:', error);
-    } finally {
-        await mongoose.disconnect();
-        console.log('🔌 Disconnected from MongoDB.');
-    }
+    await ParkingSlot.create(slotsToCreate);
+    console.log('✅ MongoDB seeding finished successfully! (All slots AVAILABLE)');
+    await mongoose.disconnect();
 }
 
 seedMongo();
