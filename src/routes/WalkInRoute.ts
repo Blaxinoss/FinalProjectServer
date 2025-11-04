@@ -82,6 +82,10 @@ router.post('/register', async (req, res) => {
         },
       });
     }
+    
+    if(vehicle.hasOutstandingDebt || user.hasOutstandingDebt){
+      return res.status(403).json({error:"user and vehicle are black listed due to unpaid reservation"})
+    }
 
     
 if(paymentTypeDecision === paymentMethod.CARD){

@@ -116,6 +116,13 @@ export const handlePayment = async (job: Job) => {
                 data: { hasOutstandingDebt: true }
             });
 
+            await prisma.user.update({
+                where: { id: userId }, 
+                data: { hasOutstandingDebt: true }
+            });
+            console.log(`⬛️ User ${userId} blacklisted.`);
+            
+
             console.log(`⬛️ Vehicle ${plateNumber} blacklisted due to failed payment.`);
 
             //create the checkout Link to give to the exiting user when failing to pay

@@ -71,7 +71,7 @@ export const calculateBill = (session: ParkingSession): number => {
     // --- 5. Final Amount (Optional: Rounding) ---
     // Example: Round to 2 decimal places
     const finalAmount = Math.round(amount * 100);
-    console.log(`Session ${session.id}: Final bill amount = ${finalAmount} EGP.`);
+    console.log(`Session ${session.id}: Final bill amount = ${finalAmount/100} EGP.`);
 
     return finalAmount;
 };

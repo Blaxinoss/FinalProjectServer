@@ -6,6 +6,7 @@ import { SlotStatus } from "../types/parkingEventTypes.js";
 import {CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS} from "../constants/constants.js"
 import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../src/generated/prisma/index.js";
 import { stripe } from "../services/stripe.js";
+import { error } from "console";
 
 //TODO
 // import { authMiddleware } from "../middleware/auth"; // ستحتاج إلى middleware للتحقق من هوية المستخدم
@@ -42,6 +43,10 @@ router.post("/", async (req: Request, res: Response) => {
     if(!user){
             return res.status(403).json({ error: "This user does not exist." });
 
+    }
+
+    if(user.hasOutstandingDebt || vehicle.hasOutstandingDebt){
+      return res.status(403).json({error:`you have a debt that have not been paid`})
     }
     const start = new Date(startTime);
     const end = new Date(endTime);

@@ -14,7 +14,10 @@ import {  handleGracePeriodExpiry } from "../workerProcessors/sessionProcessors/
 import { handleSessionExpiry } from "../workerProcessors/sessionProcessors/handleSessionExpiry.js";
 import { handleSlotEvent } from "../workerProcessors/slotProcessors/handleSlotEvent.js";
 import { handlePayment } from "../workerProcessors/paymentProcessors/handlePayment.js";
+import { connectRedis } from "../db&init/redis.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
+
+export const redisWorker = await connectRedis();
 
 // --- Initialize DBs and MQTT ---
 await mongoConnect();

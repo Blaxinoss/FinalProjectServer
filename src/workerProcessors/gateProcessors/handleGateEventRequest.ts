@@ -9,10 +9,7 @@ import { getMQTTClient_IN_WORKER } from '../../workers/consumer.js';
 import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from '../../src/generated/prisma/index.js';
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
-
-
-const redis = await connectRedis();
-
+import { redisWorker } from '../../workers/consumer.js';
 
 /**
  * 🚪 الدالة الرئيسية التي تتعامل مع طلبات الدخول من البوابة (بنمط القرار النهائي).
@@ -36,6 +33,20 @@ export const handleGateEntryRequest = async (job: Job) => {
             throw new Error('Missing plateNumber in job data');
         }
 
+        const vehicle = await prisma.vehicle.findUnique({
+            where: { plate: plateNumber }
+        });
+
+        if (vehicle?.hasOutstandingDebt) {
+            console.warn(`BLACKLISTED vehicle ${plateNumber} attempted entry.`);
+            reason = 'OUTSTANDING_DEBT';
+            message = 'This vehicle has unpaid fees. Please contact customer service to unlock.';
+            decision = 'DENY_ENTRY';
+            
+            // ارمي خطأ هنا عشان نوقف التنفيذ ونروح للـ finally
+            throw new Error(reason); 
+        }
+
         const now = new Date();
         const gracePeriodStart = new Date(now.getTime() + GRACE_PERIOD_EARLY_ENTERANCE_MINUTES * 60000);
         
@@ -49,6 +60,7 @@ export const handleGateEntryRequest = async (job: Job) => {
     endTime: { gte: now },
   },
   include: { vehicle: true }
+  
 });
         console.log(reservation ? `Reservation found for plate ${plateNumber}: ${reservation.id}` : `No reservation found for plate ${plateNumber}.`);
         // =======================
@@ -56,6 +68,8 @@ export const handleGateEntryRequest = async (job: Job) => {
         // =======================
         if (reservation) {
             
+            
+
             console.log(`🔍 Found reservation ${reservation.id} for plate ${plateNumber}.`);
             const designatedSlotStatus = await ParkingSlot.findById(reservation.slotId).select('status').lean();
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
@@ -98,7 +112,7 @@ export const handleGateEntryRequest = async (job: Job) => {
         //  الحالة ب: لا يوجد حجز (Walk-in)
         // =======================
         else {
-            const permission = await redis.get(`entry-permit:${plateNumber}`);
+            const permission = await redisWorker.get(`entry-permit:${plateNumber}`);
 
             if (!permission) {
                 reason = 'NO_RESERVATION_OR_PERMIT';
@@ -167,7 +181,7 @@ export const handleGateEntryRequest = async (job: Job) => {
                     }} ,
                     // Optional: $inc stats.total_uses_today if assignment counts
                 });
-                    await redis.del(`entry-permit:${plateNumber}`);
+                    await redisWorker.del(`entry-permit:${plateNumber}`);
 
                     // ✅ تعيين القرار بالنجاح للـ Walk-in
                     decision = 'ALLOW_ENTRY';
