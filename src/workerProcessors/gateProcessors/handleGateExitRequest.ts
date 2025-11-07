@@ -107,6 +107,15 @@ export const handleGateExitRequest = async (job: Job) => {
             reason = 'PAYMENT_PROCESSING_CARD';
             message = 'Payment processing... Gate opening.';
         }
+
+        else if (status === TransactionStatus.CANCELLED) {
+    // (الأدمن لغاها)
+    console.log(`Payment for ${lastSession.id} was CANCELLED. Opening gate.`);
+    decision = 'ALLOW_EXIT';
+    reason = 'SESSION_CANCELLED';
+    message = 'Session was cancelled by administration.';
+}
+
         else {
             console.log(`WEIRD STATE: Job ${job.id}, Status: ${status}, Method: ${lastSession.paymentType}`);
             decision = 'DENY_EXIT';

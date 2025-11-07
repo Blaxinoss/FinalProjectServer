@@ -32,6 +32,7 @@ enum TransactionStatus{
   COMPLETED
   FAILED
   UNPAID_EXIT
+  CANCELLED
 }
 
 enum SlotType {

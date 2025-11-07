@@ -203,6 +203,7 @@ router.get("/me", async (req: Request, res: Response) => {
 
 // --- 3. Cancel a Reservation ---
 // المسار: POST /reservations/:id/cancel
+// FOR USER ONLY !!!!!!!!!
 router.post("/:id/cancel", async (req: Request, res: Response) => {
   // TODO: يجب إضافة middleware للتحقق من أن المستخدم مسجل دخوله
 
@@ -278,32 +279,66 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
 // المسار: PUT /reservations/:id
 // if user want to change start or end time he must cancel and create a new reservation
 // this route is only used internally by admin to change slotId in emergency cases
-router.put("/:id", async (req: Request, res: Response) => {
-  // TODO: يجب إضافة middleware للتحقق من أن المستخدم هو مدير (Admin)
+// FOR ADMIN ONLY!!!!!!!!!!!!
+router.put("/:id/status", async (req: Request, res: Response) => {
+    // (الميدل وير بتاع الأدمن شغال)
+    
 
     if (!req.params.id) {
-      res.status(400).json({ message: "Reservation Id is not provided" });
-      return;
+        return res.status(400).json({ error: "No reservation id provided." });
     }
-  const reservationId = parseInt(req.params.id);
-  const { status,slotId } = req.body;
 
-  try {
-    const updatedReservation = await prisma.reservation.update({
-      where: { id: reservationId },
-      data: {
 
-        status,
-        slotId
-        
-      },
-    });
+    const reservationId = parseInt(req.params.id);
+    const { newStatus } = req.body; // { "newStatus": "CANCELLED" }
 
-    res.status(200).json(updatedReservation);
-  } catch (error) {
-    console.error("Error updating reservation:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+    if (!newStatus) {
+        return res.status(400).json({ error: "No newStatus provided." });
+    }
+
+    try {
+        // --- 1. هات الحجز الأصلي (عشان نجيب بياناته) ---
+        const reservation = await prisma.reservation.findUnique({
+            where: { id: reservationId }
+        });
+
+        if (!reservation) {
+            return res.status(404).json({ error: "Reservation not found." });
+        }
+
+
+        // (أهم حالة: لو الأدمن بيلغي الحجز)
+        if (newStatus === ReservationsStatus.CANCELLED) {
+            
+            // 2أ. الغي الهولد بتاع الفلوس (لو موجود)
+            if (reservation.paymentIntentId) {
+                try {
+                    await stripe.paymentIntents.cancel(reservation.paymentIntentId);
+                    console.log(`Admin cancelled reservation ${reservationId}, PaymentIntent ${reservation.paymentIntentId} cancelled.`);
+                } catch (stripeError: any) {
+                    console.error(`Error cancelling Stripe intent while admin cancelled reservation:`, stripeError.message);
+                    // (ممكن نوقف هنا أو نكمل - الأفضل نكمل ونلغي الحجز)
+                }
+            }
+            
+            // 2ب. (لو فيه جوبات مستقبلية مرتبطة بالحجز ده، نلغيها هنا)
+            // (في حالتنا الجوبات مرتبطة بالسيشن، فمفيش حاجة هنا)
+        }
+
+        // --- 3. تنفيذ التحديث في الداتابيز ---
+        const updatedReservation = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: {
+                status: newStatus 
+            },
+        });
+
+        res.status(200).json(updatedReservation);
+
+    } catch (error: any) {
+        console.error("Error updating reservation status:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
 });
 
 // --- 5. Get All Reservations (للمدير فقط) ---
