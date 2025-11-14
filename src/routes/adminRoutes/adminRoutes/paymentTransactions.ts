@@ -1,14 +1,6 @@
-import { Router } from "express";
-import { prisma } from "./routes.js"; // Assuming prisma is exported from here
-import type { Request, Response } from "express";
-
-
-
- //TODO
-   //  AUTH
-  //CHECK BUSINESS LOGIC
-
-
+import { Router, type Request, type Response } from "express";
+import { prisma } from "../../routes.js";
+import { TransactionStatus } from "../../../src/generated/prisma/index.js";
 const router = Router();
 
 /* ---------------- GET ALL PAYMENT TRANSACTIONS ---------------- */
@@ -59,46 +51,6 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-/* ---------------- CREATE PAYMENT TRANSACTION ---------------- */
-router.post("/", async (req: Request, res: Response): Promise<void> => {
-  try {
-    // Note: paidAt, createdAt, updatedAt, and transactionStatus have defaults in the schema
-    const { parkingSessionId, amount, paymentMethod, transactionStatus } = req.body;
-
-    if (!parkingSessionId || !amount || !paymentMethod) {
-      res.status(400).json({
-        success: false,
-        message: "Missing required fields: parkingSessionId, amount, and paymentMethod",
-      });
-      return;
-    }
-
-    // Basic type/value validation
-    if (typeof parkingSessionId !== 'number' || typeof amount !== 'number' || typeof paymentMethod !== 'string') {
-        res.status(400).json({ success: false, message: "Invalid data types for one or more fields" });
-        return;
-    }
-
-
-    const newTransaction = await prisma.paymentTransaction.create({
-      data: { 
-          parkingSessionId, 
-          amount, 
-          paymentMethod, 
-          // transactionStatus is optional in the request body as it has a default, but if provided, use it
-          ...(transactionStatus && { transactionStatus }) 
-      },
-    });
-
-    res.status(201).json({ success: true, data: newTransaction });
-  } catch (error: any) {
-    res.status(500).json({
-      code: error.code || null,
-      message: `Error while creating the payment transaction: ${error.message || "Unknown error"}`,
-    });
-  }
-});
-
 /* ---------------- UPDATE PAYMENT TRANSACTION ---------------- */
 router.put("/:id", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -119,7 +71,6 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-
     const updatedTransaction = await prisma.paymentTransaction.update({
       where: { id },
       data,
@@ -127,10 +78,9 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({ success: true, data: updatedTransaction });
   } catch (error: any) {
-    // P2025 is often the error code for record not found in Prisma update operations
     if (error.code === 'P2025') {
-       res.status(404).json({ success: false, message: "Payment Transaction not found for update" });
-       return;
+      res.status(404).json({ success: false, message: "Payment Transaction not found for update" });
+      return;
     }
     res.status(500).json({
       code: error.code || null,
@@ -157,7 +107,6 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({ success: true, data: deletedTransaction });
   } catch (error: any) {
-    // P2025 is often the error code for record not found in Prisma delete operations
     if (error.code === 'P2025') {
       res.status(404).json({ success: false, message: "Payment Transaction not found for deletion" });
       return;
@@ -169,5 +118,40 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+/* ---------------- CREATE PAYMENT TRANSACTION ---------------- */
+router.post("/", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { parkingSessionId, amount, paymentMethod, transactionStatus } = req.body;
+
+    if (!parkingSessionId || !amount || !paymentMethod) {
+      res.status(400).json({
+        success: false,
+        message: "Missing required fields: parkingSessionId, amount, and paymentMethod",
+      });
+      return;
+    }
+
+    if (typeof parkingSessionId !== 'number' || typeof amount !== 'number' || typeof paymentMethod !== 'string') {
+        res.status(400).json({ success: false, message: "Invalid data types for one or more fields" });
+        return;
+    }
+
+    const newTransaction = await prisma.paymentTransaction.create({
+      data: { 
+          parkingSessionId, 
+          amount, 
+          paymentMethod, 
+          ...(transactionStatus && { transactionStatus }) 
+      },
+    });
+
+    res.status(201).json({ success: true, data: newTransaction });
+  } catch (error: any) {
+    res.status(500).json({
+      code: error.code || null,
+      message: `Error while creating the payment transaction: ${error.message || "Unknown error"}`,
+    });
+  }
+});
 
 export default router;

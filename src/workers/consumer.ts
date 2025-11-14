@@ -15,6 +15,7 @@ import { handleSessionExpiry } from "../workerProcessors/sessionProcessors/handl
 import { handleSlotEvent } from "../workerProcessors/slotProcessors/handleSlotEvent.js";
 import { handlePayment } from "../workerProcessors/paymentProcessors/handlePayment.js";
 import { connectRedis } from "../db&init/redis.js";
+import { handleGateExitRequest } from "../workerProcessors/gateProcessors/handleGateExitRequest.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
 
 export const redisWorker = await connectRedis();
@@ -52,8 +53,10 @@ console.log("Initializing BullMQ Workers...");
 // --- Define Workers for each Queue with Priorities ---
 
 const gateWorker = new Worker('gate-queue', async (job: Job) => {
-    if (job.name === 'gate-event-request') {
+    if (job.name === 'gate-event-entry-request') {
         return handleGateEntryRequest(job); // From gateProcessor.js
+    }else if(job.name ==='gate-event-exit-request'){
+        return handleGateExitRequest(job)
     }
     // Handle other job names if any in this queue
 }, {

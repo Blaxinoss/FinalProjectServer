@@ -1,6 +1,6 @@
 // services/paymentService.ts
 import { stripe } from './stripe.js'; // (ملف تهيئة Stripe)
-import { prisma } from '../routes/routes.js';
+import { prisma } from '../routes/clientRoutes/routes.js';
 
 /**
  * بينشئ عميل في Stripe لليوزر ده وبيحفظ التوكن بتاعه.

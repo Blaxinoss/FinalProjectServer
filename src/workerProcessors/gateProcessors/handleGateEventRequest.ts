@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { prisma } from '../../routes/routes.js';
+import { prisma } from "../../routes/routes.js";
 import { connectRedis, getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js';
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';

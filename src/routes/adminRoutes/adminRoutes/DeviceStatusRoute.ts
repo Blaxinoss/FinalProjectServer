@@ -1,6 +1,6 @@
 import { Router}from 'express';
 import type { Request, Response } from 'express';
-import DeviceStatus from '../mongo_Models/deviceStatus.js'; // استيراد الموديل
+import DeviceStatus from '../../../mongo_Models/deviceStatus.js'; // استيراد الموديل
 // import { adminAuthMiddleware } from '../middleware/auth'; // ستحتاج middleware لحماية هذه المسارات
 
 const router = Router();
@@ -11,7 +11,7 @@ const router = Router();
  * @access  Private (Admin only)
  */
 // router.get('/', adminAuthMiddleware, async (req: Request, res: Response) => {
-router.get('/', async (req: Request, res: Response) => { // مؤقتًا بدون حماية
+router.get('/devices', async (req: Request, res: Response) => { // مؤقتًا بدون حماية
   try {
     const devices = await DeviceStatus.find().sort({ lastSeen: -1 }); // رتبهم حسب آخر ظهور
     res.status(200).json(devices);
@@ -27,7 +27,7 @@ router.get('/', async (req: Request, res: Response) => { // مؤقتًا بدو�
  * @access  Private (Admin only)
  */
 // router.get('/:deviceId', adminAuthMiddleware, async (req: Request, res: Response) => {
-router.get('/:deviceId', async (req: Request, res: Response) => { // مؤقتًا بدون حماية
+router.get('/devices/:deviceId', async (req: Request, res: Response) => { // مؤقتًا بدون حماية
   try {
     const device = await DeviceStatus.findOne({ deviceId: req.params.deviceId });
 

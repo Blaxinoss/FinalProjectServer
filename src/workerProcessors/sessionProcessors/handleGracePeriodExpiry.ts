@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
-import { prisma } from "../../routes/routes.js";
+import { prisma } from "../../routes/clientRoutes/routes.js";
 import { ParkingSessionStatus } from "../../src/generated/prisma/index.js";
 import { AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import { sendPushNotification } from '../../services/notifications.js'; // 1. استدعاء دالة الإشعارات

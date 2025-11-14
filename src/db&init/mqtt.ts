@@ -50,11 +50,16 @@ export const connectMQTT = () => {
 } else if (topic === "garage/gate/entry/request") {
   console.log("🚪 Gate Entry Request message -> gate-queue");
   // Add to gate queue
-  await gateQueue.add("gate-event-request", parsed);
+  await gateQueue.add("gate-event-entry-request", parsed);
 }
   else if (topic === "garage/slots/event"){
     console.log("📍 Slot Event Request message -> slot-event-queue");
     await slotEventQueue.add('slot-event',parsed,{priority: 3});
+  }
+  else if (topic === "garage/gate/exit/request"){
+  console.log("🚪 Gate Entry Request message -> gate-queue");
+  await gateQueue.add("gate-event-exit-request", parsed);
+
   }
         
 

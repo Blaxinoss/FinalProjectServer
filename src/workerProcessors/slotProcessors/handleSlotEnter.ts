@@ -1,7 +1,7 @@
 import type { Job } from "bullmq";
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
-import { prisma } from "../../routes/routes.js";
+import { prisma } from "../../routes/clientRoutes/routes.js";
 import { ParkingSessionStatus, SlotType } from "../../src/generated/prisma/index.js"; // Import SlotType
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Corrected import
 import { Alert } from "../../mongo_Models/alert.js";

@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { prisma } from '../../routes/routes.js';
+import { prisma } from "../../routes/routes.js";
 import { getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js'; // Mongoose Model
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
@@ -29,7 +29,7 @@ import { sessionLifecycleQueue } from '../../queues/queues.js';
         },
         select: { id: true } // محتاجين الـ ID بس دلوقتي
     });
-    const candidateSlotIds = candidateSlots.map(slot => slot.id);
+    const candidateSlotIds = candidateSlots.map((slot : any) => slot.id);
     if (candidateSlotIds.length === 0) {
         console.log("Found available slots in Mongo, but none are non-emergency.");
         return null; // مفيش مرشحين متاحين ومش طوارئ
@@ -52,10 +52,10 @@ import { sessionLifecycleQueue } from '../../queues/queues.js';
         },
         select: { slotId: true }
     });
-    const reservedSlotIds = new Set(upcomingReservations.map(res => res.slotId));
+    const reservedSlotIds = new Set(upcomingReservations.map((res:any) => res.slotId));
 
     // 5. إيجاد أول ID "مرشح" وغير محجوز
-    const safeSlotId = candidateSlotIds.find(id => !reservedSlotIds.has(id)); // <-- ابحث في المرشحين
+    const safeSlotId = candidateSlotIds.find((id:any) => !reservedSlotIds.has(id)); // <-- ابحث في المرشحين
 
     if (!safeSlotId) {
         console.log("Found available, non-emergency slots, but all have upcoming reservations.");

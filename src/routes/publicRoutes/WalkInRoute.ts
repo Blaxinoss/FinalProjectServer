@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { prisma } from './routes.js';
-import { getRedisClient } from '../db&init/redis.js';
-import { createStripeCustomerAndSaveToken } from '../services/stripeUserAdding.js';
-import { stripe } from '../services/stripe.js';
-import { HOLDAMOUNT_WHILE_RESERVATIONS } from '../constants/constants.js';
-import { paymentMethod } from '../src/generated/prisma/index.js';
+import { prisma } from '../routes.js';
+import { getRedisClient } from '../../db&init/redis.js';
+import { createStripeCustomerAndSaveToken } from '../../services/stripeUserAdding.js';
+import { stripe } from '../../services/stripe.js';
+import { HOLDAMOUNT_WHILE_RESERVATIONS } from '../../constants/constants.js';
+import { paymentMethod } from '../../src/generated/prisma/index.js';
 
 const router = Router();
 

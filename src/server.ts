@@ -1,7 +1,6 @@
 import express from "express";
 import type { Application } from "express";
 import { config } from "./configs/index.js";
-import routes from './routes/routes.js';
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { connectRedis, getRedisClient } from "./db&init/redis.js";
@@ -20,7 +19,6 @@ serverAdapter.setBasePath("/admin/queues");
 
 const io = new SocketIOServer(httpServer);
 app.use(express.json());
-app.use("/api", routes);
 
 await mongoConnect();
 await connectMySQL();
@@ -30,7 +28,7 @@ const mqttClient = await connectMQTT();
 const redisClient = await connectRedis();
 const client = await getRedisClient();
 
-import router from "./routes/WalkInRoute.js";
+import router from "./routes/publicRoutes/WalkInRoute.js";
 app.use('/api/walk-in',router)
 
 

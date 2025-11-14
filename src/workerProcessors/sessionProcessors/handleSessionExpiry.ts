@@ -1,5 +1,5 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
-import { prisma } from "../../routes/routes.js";
+import { prisma } from "../../routes/clientRoutes/routes.js";
 import { ParkingSessionStatus } from "../../src/generated/prisma/index.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } from "../../constants/constants.js";

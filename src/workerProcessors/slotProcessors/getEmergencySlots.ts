@@ -1,5 +1,5 @@
 import { ParkingSlot as MongoParkingSlot } from "../../mongo_Models/parkingSlot.js"; // Alias for clarity
-import { prisma } from "../../routes/routes.js";
+import { prisma } from "../../routes/clientRoutes/routes.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { SlotType } from "../../src/generated/prisma/index.js"; // Use Prisma enum
 

@@ -1,6 +1,6 @@
 // services/notificationService.ts
 
-import { prisma } from "../routes/routes.js";
+import { prisma } from "../routes/clientRoutes/routes.js";
 import axios from 'axios'; // ⬅️ 1. استدعاء axios
 
 export const sendPushNotification = async (

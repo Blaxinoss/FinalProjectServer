@@ -1,12 +1,10 @@
 import { Router } from "express";
 import type { Request, Response} from 'express'
-import { prisma } from "../routes/routes.js"; // تأكد من أن المسار صحيح
-import { ParkingSlot } from "../mongo_Models/parkingSlot.js";
-import { SlotStatus } from "../types/parkingEventTypes.js";
-import {CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS} from "../constants/constants.js"
-import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../src/generated/prisma/index.js";
-import { stripe } from "../services/stripe.js";
-import { error } from "console";
+import { prisma } from "../routes.js";
+
+import {CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS} from "../../constants/constants.js"
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../../src/generated/prisma/index.js";
+import { stripe } from "../../services/stripe.js";
 
 //TODO
 // import { authMiddleware } from "../middleware/auth"; // ستحتاج إلى middleware للتحقق من هوية المستخدم
@@ -24,7 +22,7 @@ const router = Router();
 router.post("/", async (req: Request, res: Response) => {
   // افترض أن لديك middleware يضيف المستخدم للـ request
   // const userId = req.user.id;
-  const userId = 1; // مثال مؤقت
+  const userId = req.user?.id!
   const { plateNumber, startTime, endTime,paymentTypeDecision} = req.body;
 
   let paymentIntentId: string | null = null;
@@ -35,7 +33,7 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "All fields are required." });
     }
     const user = await prisma.user.findUnique({ where: { id: userId }, include: { Vehicles: true } });
-    const vehicle = user?.Vehicles.find(v => v.plate === plateNumber);
+    const vehicle = user?.Vehicles.find((v:{plate:any})=> v.plate === plateNumber);
     if (!vehicle) {
       return res.status(403).json({ error: "This vehicle does not belong to the user." });
     }
@@ -89,7 +87,7 @@ router.post("/", async (req: Request, res: Response) => {
       },
       select: { slotId: true }
     });
-    const busyFromReservations = conflictingReservations.map(r => r.slotId);
+    const busyFromReservations = conflictingReservations.map((r: { slotId: string }) => r.slotId);
 
     const conflictingSessions = await prisma.parkingSession.findMany({
         where: {
@@ -99,7 +97,7 @@ router.post("/", async (req: Request, res: Response) => {
         },
         select: { slotId: true }
     });
-    const busyFromSessions = conflictingSessions.map(s => s.slotId);
+    const busyFromSessions = conflictingSessions.map((s:{slotId:string}) => s.slotId);
     // --- ⬆️ نهاية الإضافة ⬆️ ---
 
 
@@ -175,16 +173,16 @@ router.post("/", async (req: Request, res: Response) => {
 
 // --- 2. Get Current User's Reservations ---
 // المسار: GET /reservations/me
-router.get("/me", async (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   // TODO: يجب إضافة middleware للتحقق من أن المستخدم مسجل دخوله
   // const userId = req.user.id;
 
   try {
+    const userId = req.user?.id!
     const userReservations = await prisma.reservation.findMany({
       where: {
-        // userId: userId,
-        userId: 1, // مثال مؤقت
-        status: "CONFIRMED", // اعرض فقط الحجوزات المؤكدة والقادمة
+        userId,
+        status: ReservationsStatus.CONFIRMED, // اعرض فقط الحجوزات المؤكدة والقادمة
         startTime: {
           gte: new Date(), // gte = greater than or equal to
         },
@@ -208,9 +206,10 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   // TODO: يجب إضافة middleware للتحقق من أن المستخدم مسجل دخوله
 
     if (!req.params.id) {
-      res.status(400).json({ message: "User Id is not provided" });
+      res.status(400).json({ message: "reservation Id is not provided" });
       return;
     }
+  const userId = req.user?.id!;
 
   const reservationId = parseInt(req.params.id);
   // const userId = req.user.id;
@@ -218,17 +217,16 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   try {
     // 1. تأكد أن الحجز موجود أصلاً
     const reservation = await prisma.reservation.findUnique({
-      where: { id: reservationId },
+      where: { id: reservationId,userId },
     });
 
     if (!reservation) {
       return res.status(404).json({ error: "Reservation not found." });
     }
 
-    //UNCOMMENT AFTER AUTH IMPLEMENTATION
-    // if(reservation.userId !== userId ){
-    //   return res.status(403).json({ error: "You are not authorized to cancel this reservation." });
-    // }
+    if(reservation.userId !== userId ){
+      return res.status(403).json({ error: "You are not authorized to cancel this reservation." });
+    }
 
     if(reservation.status !== "CONFIRMED"){
       return res.status(400).json({ error: "Only CONFIRMED reservations can be cancelled." });
@@ -262,7 +260,7 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
         id: reservationId,
       },
       data: {
-        status: "CANCELLED",
+        status: ReservationsStatus.CANCELLED,
       },
     });
         res.status(200).json(cancelledReservation);
@@ -275,88 +273,6 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   }
 });
 
-// --- 4. Update a Reservation (للمدير فقط) ---
-// المسار: PUT /reservations/:id
-// if user want to change start or end time he must cancel and create a new reservation
-// this route is only used internally by admin to change slotId in emergency cases
-// FOR ADMIN ONLY!!!!!!!!!!!!
-router.put("/:id/status", async (req: Request, res: Response) => {
-    // (الميدل وير بتاع الأدمن شغال)
-    
 
-    if (!req.params.id) {
-        return res.status(400).json({ error: "No reservation id provided." });
-    }
-
-
-    const reservationId = parseInt(req.params.id);
-    const { newStatus } = req.body; // { "newStatus": "CANCELLED" }
-
-    if (!newStatus) {
-        return res.status(400).json({ error: "No newStatus provided." });
-    }
-
-    try {
-        // --- 1. هات الحجز الأصلي (عشان نجيب بياناته) ---
-        const reservation = await prisma.reservation.findUnique({
-            where: { id: reservationId }
-        });
-
-        if (!reservation) {
-            return res.status(404).json({ error: "Reservation not found." });
-        }
-
-
-        // (أهم حالة: لو الأدمن بيلغي الحجز)
-        if (newStatus === ReservationsStatus.CANCELLED) {
-            
-            // 2أ. الغي الهولد بتاع الفلوس (لو موجود)
-            if (reservation.paymentIntentId) {
-                try {
-                    await stripe.paymentIntents.cancel(reservation.paymentIntentId);
-                    console.log(`Admin cancelled reservation ${reservationId}, PaymentIntent ${reservation.paymentIntentId} cancelled.`);
-                } catch (stripeError: any) {
-                    console.error(`Error cancelling Stripe intent while admin cancelled reservation:`, stripeError.message);
-                    // (ممكن نوقف هنا أو نكمل - الأفضل نكمل ونلغي الحجز)
-                }
-            }
-            
-            // 2ب. (لو فيه جوبات مستقبلية مرتبطة بالحجز ده، نلغيها هنا)
-            // (في حالتنا الجوبات مرتبطة بالسيشن، فمفيش حاجة هنا)
-        }
-
-        // --- 3. تنفيذ التحديث في الداتابيز ---
-        const updatedReservation = await prisma.reservation.update({
-            where: { id: reservationId },
-            data: {
-                status: newStatus 
-            },
-        });
-
-        res.status(200).json(updatedReservation);
-
-    } catch (error: any) {
-        console.error("Error updating reservation status:", error);
-        res.status(500).json({ error: "Internal server error" });
-    }
-});
-
-// --- 5. Get All Reservations (للمدير فقط) ---
-// المسار: GET /reservations
-router.get("/", async (req: Request, res: Response) => {
-  // TODO: يجب إضافة middleware للتحقق من أن المستخدم هو مدير (Admin)
-
-  try {
-    const allReservations = await prisma.reservation.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-    res.status(200).json(allReservations);
-  } catch (error) {
-    console.error("Error fetching all reservations:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 export default router;
