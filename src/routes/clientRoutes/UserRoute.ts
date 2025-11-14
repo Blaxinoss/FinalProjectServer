@@ -1,8 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { PrismaClient } from "../../src/generated/prisma/index.js";
-import type { User } from "../../src/generated/prisma/client.js";
-import bcrypt from 'bcrypt';
+import { createStripeCustomerAndSaveToken } from '../../services/stripeUserAdding.js';
 
 import { prisma } from "../routes.js";
 
@@ -87,6 +85,17 @@ message: `Error while updating the user: ${error.message || "Unknown error"}`
   }
 });
 
+router.post('/save-card', async (req, res) => {
+    try{
+    const { paymentMethodId } = req.body; // paymentMethodId بييجي من الفرونت إند (Stripe.js)
+
+ const customerToken = await createStripeCustomerAndSaveToken(req.user?.id!, paymentMethodId);
+
+        res.status(200).json({ message: 'Card saved successfully!' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 
 export default router;

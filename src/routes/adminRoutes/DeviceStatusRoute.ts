@@ -1,6 +1,6 @@
 import { Router}from 'express';
 import type { Request, Response } from 'express';
-import DeviceStatus from '../../../mongo_Models/deviceStatus.js'; // استيراد الموديل
+import DeviceStatus from '../../mongo_Models/deviceStatus.js'; // استيراد الموديل
 // import { adminAuthMiddleware } from '../middleware/auth'; // ستحتاج middleware لحماية هذه المسارات
 
 const router = Router();

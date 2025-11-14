@@ -29,6 +29,7 @@ const redisClient = await connectRedis();
 const client = await getRedisClient();
 
 import router from "./routes/publicRoutes/WalkInRoute.js";
+import mainRouter from "./routes/routes.js";
 app.use('/api/walk-in',router)
 
 
@@ -49,6 +50,8 @@ app.use("/admin/queues", serverAdapter.getRouter());
 app.use('/', (req, res) => {
     res.send('Welcome to the Parking Management System API');
 });
+
+app.use('/api', mainRouter);
 
 io.on("connection", (socket) => {
     console.log("Socket connected:", socket.id);

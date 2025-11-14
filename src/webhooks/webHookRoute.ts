@@ -1,9 +1,9 @@
 // routes/webhookRoutes.ts
 import { Router } from 'express';
-import { prisma } from '../routes.js';
-import { stripe } from '../../services/stripe.js';
+import { prisma } from '../routes/routes.js';
+import { stripe } from '../services/stripe.js';
 import Stripe from 'stripe';
-import { TransactionStatus } from '../../src/generated/prisma/index.js';
+import { TransactionStatus } from '../src/generated/prisma/index.js';
 
 const router = Router();
 

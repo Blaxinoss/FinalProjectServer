@@ -1,29 +1,27 @@
 
 import express from 'express'
-import { PrismaClient } from '../../src/generated/prisma/index.js';
 
-import AdminRouter from '../adminRoutes/adminRoutes/AdminRoutesOLDGROUPED.js'
-import { authenticateUser } from '../../middleware/AuthenticateUser.js';
-import { requireAdminRule } from '../../middleware/requireAdminRules.js';
+import { PrismaClient } from '../src/generated/prisma/index.js';
+import AdminRouter from '../routes/adminRoutes/AdminRoutes.js'
 
-import  walkInRoutes from '../publicRoutes/WalkInRoute.js'
-import webhookRoutes from '../publicRoutes/webHookRoute.js'
+import { authenticateUser, } from '../middleware/AuthenticateUser.js';
+import { requireAdminRule } from '../middleware/requireAdminRules.js';
 
-const mainRouter = express.Router();
-const UserRouter = express.Router();
+import ClientRouter from '../routes/clientRoutes/ClientRoutes.js'
+import PublicRouter from '../routes/publicRoutes/PublicRoutes.js'
 
 export const prisma = new PrismaClient();
 
-UserRouter.use()
+const mainRouter = express.Router();
 
-
-mainRouter.use('/walk-in', walkInRoutes);     // ⬅️ زي /api/walk-in/register
-mainRouter.use('/webhooks', webhookRoutes); // ⬅️ زي /api/webhooks/stripe
-
+//api/admin
 mainRouter.use('/admin',authenticateUser,requireAdminRule,AdminRouter)
-mainRouter.use('/',authenticateUser,UserRouter)
 
+//api/client
+mainRouter.use('/client',authenticateUser,ClientRouter)
 
+//api/public
+mainRouter.use('/public',PublicRouter)
 
 
 export default mainRouter;
