@@ -1,5 +1,5 @@
 import { CONFLICT_FEE, MINIMUM_CHARGE, PENALTY_RATE_PER_MINUTE, REGULAR_RATE_PER_MINUTE } from "../../constants/constants.js";
-import type { ParkingSession } from "../../src/generated/prisma/client.js";
+import type { ParkingSession } from "../../generated/prisma/index.js";
 
 
 function calculateDurationMinutes(start: Date, end: Date): number {

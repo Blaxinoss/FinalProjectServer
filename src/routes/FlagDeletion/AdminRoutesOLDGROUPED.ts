@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
-import { prisma } from "../routes.js";
-import { ParkingSessionStatus, paymentMethod, ReservationsStatus, TransactionStatus, type User, type Vehicle } from "../../src/generated/prisma/index.js";
+import { prisma } from "../prsimaForRouters.js";
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus, TransactionStatus, type User, type Vehicle } from "../../generated/prisma/index.js";
 import { getMQTTClient } from "../../db&init/mqtt.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";

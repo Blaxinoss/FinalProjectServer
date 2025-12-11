@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { createStripeCustomerAndSaveToken } from '../../services/stripeUserAdding.js';
 
-import { prisma } from "../routes.js";
+import { prisma } from "../prsimaForRouters.js";
 
  //TODO
    //  AUTH

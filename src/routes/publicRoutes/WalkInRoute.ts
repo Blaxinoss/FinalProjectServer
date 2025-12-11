@@ -1,25 +1,20 @@
 import { Router } from 'express';
-import { prisma } from '../routes.js';
+import { prisma } from '../prsimaForRouters.js';
 import { getRedisClient } from '../../db&init/redis.js';
-import { createStripeCustomerAndSaveToken } from '../../services/stripeUserAdding.js';
 import { stripe } from '../../services/stripe.js';
 import { HOLDAMOUNT_WHILE_RESERVATIONS } from '../../constants/constants.js';
-import { paymentMethod } from '../../src/generated/prisma/index.js';
+import { paymentMethod } from '../../generated/prisma/index.js';
 
 const router = Router();
-
-// داخل ملف walkInRoutes.ts
-
-// داخل ملف walkInRoutes.ts
 
 router.post('/register', async (req, res) => {
   try {
     const { uuid,name, phone, email,plateNumber,expectedDurationMinutes,licenseExpiry,paymentMethodId , paymentTypeDecision} = req.body;
  const redis = await getRedisClient();
     // --- 🛡️ قسم التحقق من الصحة (Validation) ---
- if (!plateNumber || !phone || !uuid || !name || !email || !expectedDurationMinutes || !paymentTypeDecision ) {
-      return res.status(400).json({ error: 'Missing data, all fields are required.' });
-    }
+if (!plateNumber || !phone || !uuid || !name || !email || !expectedDurationMinutes || !paymentTypeDecision) { // ⬅️ شيلنا الـ !!
+    return res.status(400).json({ error: 'Missing data, all fields are required.' });
+}
     const phoneRegex = /^01[0125][0-9]{8}$/;
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({ error: 'Invalid Egyptian phone number format.' });
@@ -113,6 +108,7 @@ await prisma.user.update({
         currency: 'egp',
         customer: customer.id,
             payment_method: paymentMethodId, 
+            
         capture_method: 'manual', // ⬅️ هولد فقط
         confirm: true,
         off_session: true,

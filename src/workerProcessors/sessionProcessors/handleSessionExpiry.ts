@@ -1,9 +1,9 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
-import { prisma } from "../../routes/clientRoutes/routes.js";
-import { ParkingSessionStatus } from "../../src/generated/prisma/index.js";
+import {prisma} from '../../routes/prsimaForRouters.js';
+import { ParkingSessionStatus } from "../../generated/prisma/index.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } from "../../constants/constants.js";
-import { sendPushNotification } from "../../services/notifications.js";
+// import { sendPushNotification } from "../../services/notifications.js";
 import { sessionLifecycleQueue } from "../../queues/queues.js";
 
 export const handleSessionExpiry = async (job: any) => {

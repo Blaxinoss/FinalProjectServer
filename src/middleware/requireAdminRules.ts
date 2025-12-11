@@ -1,6 +1,6 @@
 
 import type { NextFunction, Request, Response } from "express";
-import { userRole } from "../src/generated/prisma/index.js";
+import { userRole } from "../generated/prisma/index.js";
 
 export const requireAdminRule=(req:Request,res:Response,next:NextFunction)=>{
 

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
-import { prisma } from "../routes.js";
-import type { User } from "../../src/generated/prisma/index.js";
+import { prisma } from "../prsimaForRouters.js";
+import type { User } from "../../generated/prisma/index.js";
 
 const router = Router();
 

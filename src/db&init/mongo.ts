@@ -5,7 +5,6 @@ import { config } from "../configs/index.js"
 
 export const mongoConnect = async () => {
     try {
-        console.log("Mongo URI from config:", config.mongoUri);
         await mongoose.connect(config.mongoUri)
         console.log('MongoDB connected Successfully')
     } catch (error) {

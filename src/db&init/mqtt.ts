@@ -14,7 +14,7 @@ export const connectMQTT = () => {
   client = mqtt.connect(config.mqttBroker, config.mqttOptions);
 
   client.on("connect", () => {
-    console.log("✅ MQTT connected successfully", client.options);
+    console.log("✅ MQTT connected successfully");
     
     // ⭐ اعمل subscribe مرة واحدة بس
     if (!isSubscribed) {
@@ -72,7 +72,14 @@ export const connectMQTT = () => {
 
   client.on("error", (err) => {
     console.error("🚨 MQTT connection error:", err);
-    client.end();
+  });
+
+  client.on("reconnect", () => {
+    console.log("🔄 MQTT Reconnecting...");
+  });
+
+  client.on("offline", () => {
+    console.log("zzz MQTT Client Offline");
   });
 
   // ⭐ لو الـ connection انقطع، reset الـ flag

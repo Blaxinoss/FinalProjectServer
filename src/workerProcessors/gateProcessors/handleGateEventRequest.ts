@@ -1,12 +1,12 @@
 import { Job } from 'bullmq';
-import { prisma } from "../../routes/routes.js";
+import { prisma } from "../../routes/prsimaForRouters.js";
 import { connectRedis, getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js';
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
 import { assignSlotAndStartSession, findSafeAlternativeSlot } from '../Helpers/helpers.js';
 import { getMQTTClient_IN_WORKER } from '../../workers/consumer.js';
-import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from '../../src/generated/prisma/index.js';
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from '../../generated/prisma/index.js';
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
 import { redisWorker } from '../../workers/consumer.js';

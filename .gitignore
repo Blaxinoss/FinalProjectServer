@@ -20,3 +20,9 @@ tmp/
 .env.development.local
 .env.test.local
 .env.production.local
+node_modules
+.env
+src/src/*
+prisma/migrations/*
+src/generated/prisma/*
+prisma/seed*.ts

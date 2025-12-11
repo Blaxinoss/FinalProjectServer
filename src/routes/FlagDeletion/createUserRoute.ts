@@ -1,7 +1,7 @@
 
 const router: Router = Router();
 import { Router, type Request, type Response } from "express";
-import { prisma } from '../routes.js';
+import { prisma } from '../prsimaForRouters.js';
 import bcrypt from 'bcrypt';
 
 router.post("/", async (req: Request, res: Response): Promise<void> => {

@@ -1,10 +1,10 @@
 import type { Job } from "bullmq";
-import { prisma } from "../../routes/routes.js";
-import { paymentMethod, TransactionStatus, type ParkingSession, type paymentTransaction, type User } from "../../src/generated/prisma/index.js";
+import { prisma } from "../../routes/prsimaForRouters.js";
+import { paymentMethod, TransactionStatus, type ParkingSession, type paymentTransaction, type User } from "../../generated/prisma/index.js";
 import { Alert } from "../../mongo_Models/alert.js";
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js";
 import { stripe } from "../../services/stripe.js";
-import { sendPushNotification } from "../../services/notifications.js";
+// import { sendPushNotification } from "../../services/notifications.js";
 import { sendSmsNotification } from "../../services/smsTwilio.js";
 
 export const handlePayment = async (job: Job) => {
@@ -97,7 +97,7 @@ export const handlePayment = async (job: Job) => {
                 }
             });
             // (إرسال إشعار "إيصال" للعميل)
-            await sendPushNotification(userId, "Payment Successful", `Charged ${amount/100} EGP for your parking.`);
+            // await sendPushNotification(userId, "Payment Successful", `Charged ${amount/100} EGP for your parking.`);
 
             return `Payment ${paymentTransaction.id} completed and payment went successfully. for job ${job.id}`;
             // --- ⬆️ نهاية الخطوة الحاسمة ⬆️ ---
@@ -158,9 +158,9 @@ export const handlePayment = async (job: Job) => {
                 //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
 
                     console.log('sending application notification')
-                await sendPushNotification(user.id,
-                    `Payment Failed for session ${sessionId}`,
-                `We couldn't charge your card for ${amount/100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
+            //     await sendPushNotification(user.id,
+            //         `Payment Failed for session ${sessionId}`,
+            //     `We couldn't charge your card for ${amount/100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
             } else {
                 console.log('User is a walk in. Sending SMS.');
 

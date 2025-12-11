@@ -1,10 +1,19 @@
 import dotenv from "dotenv";
+import path from "path";
+import fs from 'fs';
 dotenv.config({})
-console.log('read')
+import { fileURLToPath } from 'url';
+import type { IClientOptions } from "mqtt";
 
+// عشان نعرف مسار الملف الحالي (index.ts)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// 1. نرجع خطوتين لورا (من configs لـ src ومنها للرئيسي)
+// 2. ندخل فولدر cert (مفرد مش جمع)
+export const CERT_DIR = path.join(__dirname, '../../certs');
 export const config = {
-    port: process.env.PORT || 5000,
+    port: process.env.PORT || 3000,
     mongoUri: process.env.MONGO_URL || "mongodb://localhost:27017/garage",
     mysql: {
         host: process.env.MYSQL_HOST || "localhost",
@@ -17,11 +26,17 @@ export const config = {
         host: process.env.REDIS_HOST || "127.0.0.1",
         port: Number(process.env.REDIS_PORT) || 6379,
     },
- mqttBroker: process.env.MQTT_BROKER_URL || "mqtt://broker.emqx.io:1883",
-  mqttOptions: {
-    clientId: `mqttx_b9b3125e9_${Date.now()}`,
+ mqttBroker: `mqtts://${process.env.AWS_MQTT_ENDPOINT}` || "mqtt://broker.emqx.io:1883",
+  mqttOptions: <IClientOptions>{
+    key: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-private.pem.key')),
+    cert: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-certificate.pem.crt')),
+    ca: fs.readFileSync(path.join(CERT_DIR,'AmazonRootCA1.pem')),
+    clientId: `BackendServer`,
     clean: true,
-    reconnectPeriod: 1000,
+    protocolId:'MQTT',
+    reconnectPeriod: 5000,
+    port: 8883,
     connectTimeout: 30000,
+    rejectUnauthorized:true,
     keepalive: 60,
   },};

@@ -1,8 +1,8 @@
 import { Router } from "express";
 
 import type { Request,Response } from "express";
-import { prisma } from '../routes.js';
-import { ParkingSessionStatus } from "../../src/generated/prisma/index.js";
+import { prisma } from '../prsimaForRouters.js';
+import { ParkingSessionStatus } from "../../generated/prisma/index.js";
 import { getMaximumExtensionTime } from "../../services/getMaximumExtensionTime.js";
 import {  sessionLifecycleQueue } from "../../queues/queues.js";
 import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../../constants/constants.js";
