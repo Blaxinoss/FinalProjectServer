@@ -29,6 +29,8 @@ jobs:
       # 🚨 مهمة: توليد Prisma Client
       # نضمن وجود الكود المُنشأ (حتى لو تم نسيانه في الرفع)
       - name: Generate Prisma Client
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
 
       # 🛡️ التحقق من الـ Linter
