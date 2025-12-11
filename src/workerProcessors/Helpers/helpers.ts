@@ -1,12 +1,10 @@
-import { Job } from 'bullmq';
 import { prisma } from "../../routes/prsimaForRouters.js";
-import { getRedisClient } from '../../db&init/redis.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js'; // Mongoose Model
-import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
+import {  OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from '../../constants/constants.js';
 
 import { Alert } from '../../mongo_Models/alert.js';
 import { SlotStatus } from '../../types/parkingEventTypes.js';
-import { ParkingSessionStatus, ReservationsStatus, type Reservation } from '../../generated/prisma/index.js';
+import { ParkingSessionStatus, ReservationsStatus } from '../../generated/prisma/index.js';
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 /**
  * 🧠 يبحث عن مكان بديل آمن: متاح حاليًا (من MongoDB) وليس عليه حجوزات قريبة (من Prisma).
@@ -110,7 +108,7 @@ export async function assignSlotAndStartSession(reservation: any, slotToAssign: 
 
 
         // الخطوة 1: تسجيل العمليات الحرجة في قاعدة البيانات الأساسية (Prisma)
-        const [updatedReservation, newSession] = await prisma.$transaction([
+        const [, newSession] = await prisma.$transaction([
             prisma.reservation.update({
                 where: { id: reservation.id },
                 data: { status: 'FULFILLED', slotId: slotToAssign.id },

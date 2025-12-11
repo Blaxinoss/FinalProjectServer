@@ -1,7 +1,6 @@
 import type { Job } from "bullmq";
 import { prisma } from "../../routes/prsimaForRouters.js";
 import { paymentMethod, ParkingSessionStatus, TransactionStatus } from "../../generated/prisma/index.js"; // ⬅️ استيراد ParkingSessionStatus
-import mqtt from "mqtt";
 import { getMQTTClient_IN_WORKER } from "../../workers/consumer.js";
 import { Alert } from "../../mongo_Models/alert.js"; // ⬅️ استيراد Alert
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js"; // ⬅️ استيراد أنواع Alert

@@ -114,7 +114,7 @@ workers.forEach(worker => {
     worker.on('active', (job) => {
         console.log(`⚡ Worker [${worker.name}] started job ${job.id} (${job.name})`);
     });
-    worker.on('completed', (job, result) => {
+    worker.on('completed', (job) => {
         const duration = job?.finishedOn && job?.processedOn ? ((job.finishedOn - job.processedOn) / 1000).toFixed(2) : "?";
         console.log(`✅ Worker [${worker.name}] finished job ${job.id} (${job.name}) in ${duration}s.`); // Result might be large, log selectively if needed
     });

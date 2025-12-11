@@ -89,7 +89,7 @@ router.post('/save-card', async (req, res) => {
     try{
     const { paymentMethodId } = req.body; // paymentMethodId بييجي من الفرونت إند (Stripe.js)
 
- const customerToken = await createStripeCustomerAndSaveToken(req.user?.id!, paymentMethodId);
+ await createStripeCustomerAndSaveToken(req.user?.id!, paymentMethodId);
 
         res.status(200).json({ message: 'Card saved successfully!' });
     } catch (error: any) {

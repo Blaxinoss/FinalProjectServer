@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from "express";
 import { prisma } from "../prsimaForRouters.js";
-import { TransactionStatus } from "../../generated/prisma/index.js";
 const router = Router();
 
 /* ---------------- GET ALL PAYMENT TRANSACTIONS ---------------- */

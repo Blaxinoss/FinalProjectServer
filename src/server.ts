@@ -22,11 +22,11 @@ app.use(express.json());
 
 await mongoConnect();
 await connectMySQL();
-const pool = await getMySQLPool();
+await getMySQLPool();
 
-const mqttClient = await connectMQTT();
-const redisClient = await connectRedis();
-const client = await getRedisClient();
+await connectMQTT();
+await connectRedis();
+await getRedisClient();
 
 import mainRouter from "./routes/realRouters.js";
 import { prisma } from "./routes/prsimaForRouters.js";
@@ -54,7 +54,7 @@ app.use("/admin/queues", serverAdapter.getRouter());
 app.use('/api', mainRouter);
 
 if(await prisma.user.findUnique({where:{email:"abdullahismael078@gmail.com"}})===null){
-let res = await prisma.user.create({
+await prisma.user.create({
     data:{
         name:"Test User",
         email:"abdullahismael078@gmail.com",

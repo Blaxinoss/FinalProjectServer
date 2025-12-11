@@ -1,6 +1,5 @@
 import { Router } from "express";
 
-import parkingSessionsRouter from "./WalkInRoute.js";
 
 import userRouter from "../FlagDeletion/createUserRoute.js";
 import walkInRouter from './WalkInRoute.js'

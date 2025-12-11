@@ -27,7 +27,6 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
         }
     })
 
-    user?.uuid
     if(!user){
         return res.status(401).json({message:"unauthorized user, no such user in database"})
     }

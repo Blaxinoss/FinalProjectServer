@@ -26,7 +26,7 @@ export const config = {
         host: process.env.REDIS_HOST || "127.0.0.1",
         port: Number(process.env.REDIS_PORT) || 6379,
     },
- mqttBroker: `mqtts://${process.env.AWS_MQTT_ENDPOINT}` || "mqtt://broker.emqx.io:1883",
+ mqttBroker:`mqtts://${process.env.AWS_MQTT_ENDPOINT}`,
   mqttOptions: <IClientOptions>{
     key: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-private.pem.key')),
     cert: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-certificate.pem.crt')),

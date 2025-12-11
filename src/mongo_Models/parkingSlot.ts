@@ -16,12 +16,12 @@ export interface ICurrentVehicle {
 }
 
 
-interface ISlot{
-    slot_id:string;
-    status:SlotStatus;
-    current_vehicle?:ICurrentVehicle;
-  stats: ISlotStats;
-}
+// interface ISlot{
+//     slot_id:string;
+//     status:SlotStatus;
+//     current_vehicle?:ICurrentVehicle;
+//   stats: ISlotStats;
+// }
 export interface IConflictDetails { // <--- ✅ Interface جديد
   expected_plate: string;
   assigned_session_id?: string; // أو رقم لو الـ ID عندك رقم

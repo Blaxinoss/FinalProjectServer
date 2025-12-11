@@ -1,8 +1,7 @@
-import type { Job } from "bullmq";
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import {prisma} from '../../routes/prsimaForRouters.js';
-import { ParkingSessionStatus, SlotType } from "../../generated/prisma/index.js"; // Import SlotType
+import { ParkingSessionStatus} from "../../generated/prisma/index.js"; // Import SlotType
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Corrected import
 import { Alert } from "../../mongo_Models/alert.js";
 // import { sendPushNotification } from "../../services/notifications.js";
@@ -171,9 +170,9 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
 
                     // --- Rescue Logic ---
                     let newSlotId: string | null = null;
-                    let notificationTitle = "";
-                    let notificationBody = "";
-                    let notificationData: object = {};
+                    // let notificationTitle = "";
+                    // let notificationBody = "";
+                    // let notificationData: object = {};
 
                     // Cancel the original occupancy check job regardless
                     if (affectedUserSession.occupancyCheckJobId) {
@@ -212,9 +211,9 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
 
 
                         // Prepare notification
-                        notificationTitle = "🔄 Your Parking Slot has changed";
-                        notificationBody = `Apologies! Your original slot ${slot_id} was occupied by mistake. You have been redirected to slot ${newSlotId}.`;
-                        notificationData = { screen: 'SessionDetails', newSlotId: newSlotId };
+                        // notificationTitle = "🔄 Your Parking Slot has changed";
+                        // notificationBody = `Apologies! Your original slot ${slot_id} was occupied by mistake. You have been redirected to slot ${newSlotId}.`;
+                        // notificationData = { screen: 'SessionDetails', newSlotId: newSlotId };
 
                         // Update Prisma Session with new slot and new job ID
                         await prisma.parkingSession.update({
@@ -248,9 +247,9 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                             });
 
                             // Prepare notification
-                            notificationTitle = "⚠️ Redirected to Emergency Slot";
-                            notificationBody = `Your original slot ${slot_id} is occupied, and no alternatives are free. Please proceed to emergency slot ${emergencySlotId}.`;
-                            notificationData = { screen: 'SessionDetails', newSlotId: emergencySlotId };
+                            // notificationTitle = "⚠️ Redirected to Emergency Slot";
+                            // notificationBody = `Your original slot ${slot_id} is occupied, and no alternatives are free. Please proceed to emergency slot ${emergencySlotId}.`;
+                            // notificationData = { screen: 'SessionDetails', newSlotId: emergencySlotId };
 
                             // Update Prisma Session ONLY with new slot ID (NO occupancy check job for emergency)
                             await prisma.parkingSession.update({
@@ -264,9 +263,9 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                         } else {
                             // No alternative, no emergency
                             console.error(`‼️ CRITICAL: No alternative or emergency slots available for affected session ${affectedUserSession.id}.`);
-                            notificationTitle = "⚠️ Critical Parking Issue!";
-                            notificationBody = `Your original slot ${slot_id} is occupied, and NO alternative or emergency slots are available. Please contact support immediately.`;
-                            notificationData = { screen: 'EmergencyHelp' };
+                            // notificationTitle = "⚠️ Critical Parking Issue!";
+                            // notificationBody = `Your original slot ${slot_id} is occupied, and NO alternative or emergency slots are available. Please contact support immediately.`;
+                            // notificationData = { screen: 'EmergencyHelp' };
                             // Optional: Update session status
                             // await prisma.parkingSession.update({ where: { id: affectedUserSession.id }, data: { status: ParkingSessionStatus.CONFLICT } });
                         }

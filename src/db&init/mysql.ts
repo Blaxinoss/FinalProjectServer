@@ -16,8 +16,8 @@ export const connectMySQL = async () => {
         console.log('MySQL DB Connected Successfully')
 
 
-    } catch (error) {
-        console.log('error connecting to Mysql DB exiting...')
+    } catch (error:any) {
+        console.log('error connecting to Mysql DB exiting...',error.message)
         process.exit(1);
     }
 

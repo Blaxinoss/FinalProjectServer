@@ -5,7 +5,7 @@ import { handleSlotExit } from '../slotProcessors/handleSlotExit.js';
 
 export const handleSlotEvent = async (job: Job) => {
     // Extract all relevant data from the job
-    const { slot_id, plate_number, event_type, timestamp, ...otherData } = job.data;
+    const { slot_id, plate_number, event_type, timestamp } = job.data;
 
     // Basic validation
     if (!slot_id || !event_type) {
