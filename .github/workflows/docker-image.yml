@@ -27,13 +27,15 @@ jobs:
           password: ${{secrets.DOCKER_PASSWORD}}
 
       - name: build image and push to docker
-        uses: docker/build-push-actions@v5
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           cache-from: type=registry,ref=blaxinoss/fp_back:latest
           cache-to: type=inline
           platforms: linux/amd64
+          build-args: |
+            DATABASE_URL=${{ secrets.PRISMA_DATABASE_URL }}
           push: true
           tags: |
             blaxinoss/fp_back:latest
