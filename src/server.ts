@@ -52,7 +52,7 @@ app.use("/admin/queues", serverAdapter.getRouter());
 
 app.use('/api', mainRouter);
 
-app.get('/sayhi', (req, res) => {
+app.get('/hi', (req, res) => {
     res.send('Hello from our parking system Api ^^');
 })
 
