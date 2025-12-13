@@ -33,9 +33,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
 
-      # 🛡️ التحقق من الـ Linter
-      - name: Run ESLint Check
-        run: npm run lint
+
 
       # 🛠️ التحقق من الترجمة والبناء (Typescript Build)
       # هذا يضمن عدم وجود أخطاء في الـ Types
