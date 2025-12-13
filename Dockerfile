@@ -4,6 +4,7 @@
 FROM node:20-alpine AS builder
 
 ARG DATABASE_URL
+ARG CACHE_DATE
 
 # **2. تعيين المتغير (ENV) داخلياً لجعله متاحاً لـ npx prisma generate**
 ENV DATABASE_URL=$DATABASE_URL
@@ -18,7 +19,7 @@ COPY package.json package-lock.json ./
 
 # تثبيت كل التبعيات (بما فيها devDependencies لإجراء الـ build)
 RUN npm install
-
+RUN echo "Cache Buster: $CACHE_DATE"
 # نسخ ملفات الكود المصدري و prisma (بما فيها schema.prisma)
 COPY . .
 
