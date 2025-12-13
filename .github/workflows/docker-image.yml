@@ -38,3 +38,31 @@ jobs:
           tags: |
             blaxinoss/fp_back:latest
             blaxinoss/fp_back:${{ github.sha }}
+
+
+  deploy_to_ec2:
+      name: Deploy to AWS EC2 via SSH
+      needs: build_image
+      runs-on: ubuntu-latest
+      steps:
+        - name: Set up SSH Key
+          uses: webfactory/ssh-agent@v0.8.0
+          with:
+            ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+        - name: Deploy and Restart Docker Compose Service
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.EC2_HOST }}
+            username: ${{ secrets.EC2_USERNAME }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+              cd ~/comp/
+              echo "Pulling latest Docker image..."
+              echo "Stopping old service and starting new one..."
+              docker compose -f docker-compose.yaml down --remove-orphans
+              docker compose -f docker-compose.yaml up -d --force-recreate
+              docker ps
+              echo "Deployment successful."
+      
+    
