@@ -53,7 +53,7 @@ app.use("/admin/queues", serverAdapter.getRouter());
 app.use('/api', mainRouter);
 
 app.get('/hi', (req, res) => {
-    res.send('Hello from Parking Management System API');
+    res.send('Hello from our parking system API ^^');
 })
 
 // if(await prisma.user.findUnique({where:{email:"abdullahismael078@gmail.com"}})===null){
