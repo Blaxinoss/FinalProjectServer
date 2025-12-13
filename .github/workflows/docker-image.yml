@@ -63,7 +63,7 @@ jobs:
               echo "Pulling latest Docker image..."
               echo "Stopping old service and starting new one..."
               docker compose -f docker-compose.yaml down --remove-orphans
-              docker compose -f docker-compose.yaml up -d --force-recreate
+              docker compose -f docker-compose.yaml up -d --force-recreate --pull always
               docker ps
               echo "Deployment successful."
       
