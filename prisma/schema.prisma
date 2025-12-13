@@ -65,6 +65,7 @@ model User {
   address         String           @db.VarChar(255)
   licenseNumber   String           @unique @db.VarChar(50)
 paymentGatewayToken String? @unique @db.VarChar(255)
+  notificationToken String?      @db.VarChar(255)
   licenseExpiry   DateTime
   hasOutstandingDebt Boolean   @default(false)
   createdAt       DateTime         @default(now())

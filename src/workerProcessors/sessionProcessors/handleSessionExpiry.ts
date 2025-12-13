@@ -1,9 +1,9 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import {prisma} from '../../routes/prsimaForRouters.js';
-import { ParkingSessionStatus } from "../../generated/prisma/index.js";
+import { ParkingSessionStatus } from "../../generated/prisma/client.js";
 import { SlotStatus } from "../../types/parkingEventTypes.js";
 import { GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } from "../../constants/constants.js";
-// import { sendPushNotification } from "../../services/notifications.js";
+ import { sendFCMNotification } from "../../services/notifications.js";
 import { sessionLifecycleQueue } from "../../queues/queues.js";
 
 export const handleSessionExpiry = async (job: any) => {
@@ -11,7 +11,8 @@ export const handleSessionExpiry = async (job: any) => {
 const { parkingSessionId } = job.data;
     // جلب الجلسة والحجز المرتبط بها
     const session = await prisma.parkingSession.findFirst({
-        where: { id:parkingSessionId}
+        where: { id:parkingSessionId},
+        include:{user:{select:{notificationToken:true}} },
     });
 
     if(!session || !session.slotId) {
@@ -50,7 +51,11 @@ console.warn(`Job ${job.id} ran, but session ${parkingSessionId} not found.`);
         console.log(`Job ${job.id}: Session ${session.id} expired. Slot ${session.slotId} is still OCCUPIED. Starting grace period.`);
 
         // أ. أرسل تنبيه للمستخدم (زي ما أنت عملت)
-        // sendPushNotification(session.userId, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
+        if (session.user.notificationToken) {
+            sendFCMNotification(session.user.notificationToken, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
+        } else {
+            console.warn(`No notification token found for user in session ${session.id}`);
+        }
 
         // ب. إنشاء "المهمة المؤجلة الثانية" (جوب فترة السماح)
         await sessionLifecycleQueue.add(

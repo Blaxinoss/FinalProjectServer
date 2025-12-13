@@ -1,6 +1,6 @@
 import { GRACE_PERIOD_EARLY_ENTERANCE_MINUTES, GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME, MAX_ALLOWED_HOURS_TO_EXTEND_SESSION } from "../constants/constants.js";
 import { prisma } from "../routes/prsimaForRouters.js";
-import { ReservationsStatus } from "../../src/generated/prisma/index.js";
+import { ReservationsStatus } from "../../src/generated/prisma/client.js";
 
 
 export const getMaximumExtensionTime = async (slotId: string): Promise<Date> => {

@@ -1,12 +1,12 @@
 {
   "name": "finalprojectserver",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node dist/src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
-    "lint": "eslint . --ext .ts"
-  },
+    "lint": "eslint . --ext .ts",
+"build": "tsc && copyfiles -u 1 'src/generated/prisma/**/*' dist/src && copyfiles -u 1 'certs/**/*' dist/src/certs"  },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
@@ -56,6 +56,7 @@
     "@types/socket.io": "^3.0.1",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
+    "copyfiles": "^2.4.1",
     "eslint": "^9.35.0",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",

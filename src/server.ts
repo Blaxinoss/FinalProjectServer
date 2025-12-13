@@ -30,8 +30,7 @@ await getRedisClient();
 
 import mainRouter from "./routes/realRouters.js";
 import { prisma } from "./routes/prsimaForRouters.js";
-import { userRole } from "../src/generated/prisma/index.js";
-
+// import { userRole } from "./generated/prisma/client.js";
 
 createBullBoard({
   queues: [new BullMQAdapter(systemQueue),
@@ -53,21 +52,25 @@ app.use("/admin/queues", serverAdapter.getRouter());
 
 app.use('/api', mainRouter);
 
-if(await prisma.user.findUnique({where:{email:"abdullahismael078@gmail.com"}})===null){
-await prisma.user.create({
-    data:{
-        name:"Test User",
-        email:"abdullahismael078@gmail.com",
-        phone:"01022223333",
-        NationalID:"12345678901234",
-        address:"123 Test St, Test City",
-        licenseNumber:"D1234567",
-        licenseExpiry:new Date("2030-12-31"),
-        role:userRole.ADMIN,
-        uuid:"ekE0K8svqrXptFhCyfSoZcig7ko2",
-    }
+app.get('/hi', (req, res) => {
+    res.send('Hello from Parking Management System API');
 })
-}
+
+// if(await prisma.user.findUnique({where:{email:"abdullahismael078@gmail.com"}})===null){
+// await prisma.user.create({
+//     data:{
+//         name:"Test User",
+//         email:"abdullahismael078@gmail.com",
+//         phone:"01022223333",
+//         NationalID:"12345678901234",
+//         address:"123 Test St, Test City",
+//         licenseNumber:"D1234567",
+//         licenseExpiry:new Date("2030-12-31"),
+//         role:userRole.ADMIN,
+//         uuid:"ekE0K8svqrXptFhCyfSoZcig7ko2",
+//     }
+// })
+// }
 
 io.on("connection", (socket) => {
     console.log("Socket connected:", socket.id);

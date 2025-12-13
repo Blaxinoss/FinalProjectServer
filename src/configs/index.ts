@@ -6,12 +6,10 @@ import { fileURLToPath } from 'url';
 import type { IClientOptions } from "mqtt";
 
 // عشان نعرف مسار الملف الحالي (index.ts)
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// 1. نرجع خطوتين لورا (من configs لـ src ومنها للرئيسي)
-// 2. ندخل فولدر cert (مفرد مش جمع)
-export const CERT_DIR = path.join(__dirname, '../../certs');
+export const CERT_DIR = path.join(__dirname, '../certs');
 export const config = {
     port: process.env.PORT || 3000,
     mongoUri: process.env.MONGO_URL || "mongodb://localhost:27017/garage",
@@ -23,7 +21,7 @@ export const config = {
     },
     jwtSecret: process.env.JWT_SECRET || "secret",
     redis: {
-        host: process.env.REDIS_HOST || "127.0.0.1",
+        host: process.env.REDIS_HOST || "my-redis-queue",
         port: Number(process.env.REDIS_PORT) || 6379,
     },
  mqttBroker:`mqtts://${process.env.AWS_MQTT_ENDPOINT}`,

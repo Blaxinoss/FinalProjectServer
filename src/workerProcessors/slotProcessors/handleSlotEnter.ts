@@ -1,10 +1,10 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import {prisma} from '../../routes/prsimaForRouters.js';
-import { ParkingSessionStatus} from "../../generated/prisma/index.js"; // Import SlotType
+import { ParkingSessionStatus} from "../../generated/prisma/client.js"; // Import SlotType
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Corrected import
 import { Alert } from "../../mongo_Models/alert.js";
-// import { sendPushNotification } from "../../services/notifications.js";
+ import {  sendFCMNotification} from "../../services/notifications.js";
 
 import { findSafeAlternativeSlot } from "../Helpers/helpers.js";
 import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../../constants/constants.js";
@@ -156,12 +156,12 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                     const affectedUserSession = await prisma.parkingSession.findFirst({
                         where: { slotId: slot_id, status: ParkingSessionStatus.ACTIVE },
                         include: {
-                            user: { select: { id: true /*, pushToken: true*/ } },
+                            user:true,
                             vehicle: { select: { plate: true } }
                         },
                     });
 
-                    if (!affectedUserSession || !affectedUserSession.user || affectedUserSession.vehicle.plate !== expectedPlate) {
+                    if (!affectedUserSession || !affectedUserSession.userId || affectedUserSession.vehicle.plate !== expectedPlate) {
                         // If the session found doesn't match expected plate, log inconsistency but proceed cautiously
                         console.error(`CRITICAL INCONSISTENCY during conflict: Slot ${slot_id} assigned to ${expectedPlate}, but found ACTIVE session ${affectedUserSession?.id} for plate ${affectedUserSession?.vehicle.plate}. Alert created, but cannot reliably redirect.`);
                         // Maybe update the Alert created earlier with session ID if found?
@@ -170,9 +170,8 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
 
                     // --- Rescue Logic ---
                     let newSlotId: string | null = null;
-                    // let notificationTitle = "";
-                    // let notificationBody = "";
-                    // let notificationData: object = {};
+                    let notificationTitle = "";
+                    let notificationBody = "";
 
                     // Cancel the original occupancy check job regardless
                     if (affectedUserSession.occupancyCheckJobId) {
@@ -210,10 +209,8 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                         console.log(`✨ Scheduled NEW occupancy check job ${newOccupancyCheckJob.id} for redirected session ${affectedUserSession.id} to slot ${newSlotId}.`);
 
 
-                        // Prepare notification
-                        // notificationTitle = "🔄 Your Parking Slot has changed";
-                        // notificationBody = `Apologies! Your original slot ${slot_id} was occupied by mistake. You have been redirected to slot ${newSlotId}.`;
-                        // notificationData = { screen: 'SessionDetails', newSlotId: newSlotId };
+                        notificationTitle = "🔄 Your Parking Slot has changed";
+                        notificationBody = `Apologies! Your original slot ${slot_id} was occupied by mistake. You have been redirected to slot ${newSlotId}.`;
 
                         // Update Prisma Session with new slot and new job ID
                         await prisma.parkingSession.update({
@@ -246,10 +243,8 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                                 }
                             });
 
-                            // Prepare notification
-                            // notificationTitle = "⚠️ Redirected to Emergency Slot";
-                            // notificationBody = `Your original slot ${slot_id} is occupied, and no alternatives are free. Please proceed to emergency slot ${emergencySlotId}.`;
-                            // notificationData = { screen: 'SessionDetails', newSlotId: emergencySlotId };
+                            notificationTitle = "⚠️ Redirected to Emergency Slot";
+                            notificationBody = `Your original slot ${slot_id} is occupied, and no alternatives are free. Please proceed to emergency slot ${emergencySlotId}.`;
 
                             // Update Prisma Session ONLY with new slot ID (NO occupancy check job for emergency)
                             await prisma.parkingSession.update({
@@ -263,21 +258,23 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                         } else {
                             // No alternative, no emergency
                             console.error(`‼️ CRITICAL: No alternative or emergency slots available for affected session ${affectedUserSession.id}.`);
-                            // notificationTitle = "⚠️ Critical Parking Issue!";
-                            // notificationBody = `Your original slot ${slot_id} is occupied, and NO alternative or emergency slots are available. Please contact support immediately.`;
-                            // notificationData = { screen: 'EmergencyHelp' };
+                            notificationTitle = "⚠️ Critical Parking Issue!";
+                            notificationBody = `Your original slot ${slot_id} is occupied, and NO alternative or emergency slots are available. Please contact support immediately.`;
                             // Optional: Update session status
                             // await prisma.parkingSession.update({ where: { id: affectedUserSession.id }, data: { status: ParkingSessionStatus.CONFLICT } });
                         }
                     }
+   if (affectedUserSession.user.notificationToken) {
+ await sendFCMNotification(
+                        affectedUserSession.user.notificationToken,
+                        notificationTitle,
+                        notificationBody,
+                        
+                    );        } else {
+            console.warn(`No notification token found for user in session ${affectedUserSession.user.name}`);
+        }
 
-                    // Send the prepared notification
-                    // await sendPushNotification(
-                    //     affectedUserSession.userId,
-                    //     notificationTitle,
-                    //     notificationBody,
-                    //     notificationData
-                    // );
+                   
 
 
 

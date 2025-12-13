@@ -98,4 +98,28 @@ router.post('/save-card', async (req, res) => {
 });
 
 
+router.post('/register-push-token', async (req: Request, res: Response) => {
+    // ⚠️ يجب التأكد من أنك تستخرج الـ userId من رمز التوثيق (JWT) أو الـ Session
+    const userId = req.user?.id; // افترض أن هذا هو معرف المستخدم الذي تم توثيقه
+    const { token } = req.body; // استخراج التوكن من جسم الطلب
+    
+    if (!token || !userId) {
+        return res.status(400).send({ message: "Token and User ID are required." });
+    }
+    
+    try {
+        // استخدام Prisma لتحديث التوكن في حقل المستخدم
+        await prisma.user.update({
+            where: { id: userId },
+            data: { notificationToken: token },
+        });
+
+        res.status(200).send({ success: true, message: "Token updated successfully." });
+
+    } catch (e) {
+        console.error("Error saving token:", e);
+        res.status(500).send({ success: false, message: "Failed to save token." });
+    }
+});
+
 export default router;

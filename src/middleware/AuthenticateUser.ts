@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { admin } from "../services/firebaseAdmin.js";
 import { prisma } from "../routes/prsimaForRouters.js";
-import type { User } from "../../src/generated/prisma/index.js";
+import type { User } from "../../src/generated/prisma/client.js";
 
 declare global {
   namespace Express {

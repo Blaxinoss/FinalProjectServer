@@ -3,7 +3,7 @@ import type { Request, Response} from 'express'
 import { prisma } from "../prsimaForRouters.js";
 
 import {CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS} from "../../constants/constants.js"
-import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../../generated/prisma/index.js";
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../../generated/prisma/client.js";
 import { stripe } from "../../services/stripe.js";
 
 //TODO

@@ -1,5 +1,8 @@
 // // services/notificationService.ts
 
+import { prisma } from "../routes/prsimaForRouters.js";
+import { admin } from "./firebaseAdmin.js";
+
 // import { prisma } from "../routes/prsimaForRouters.js";
 // import axios from 'axios'; // ⬅️ 1. استدعاء axios
 
@@ -54,3 +57,37 @@
 //         }
 //     }
 // };
+
+
+// index.js (تابع)
+
+// مثال على رمز تسجيل يجب أن يكون لديك من الفرونت إند
+// يجب أن تحصل على هذا الرمز من قاعدة بياناتك
+
+export async function sendFCMNotification(token:string,   title: string, 
+     body: string,data?:object) {
+  try {
+
+   
+    const response = await admin.messaging().send({
+      token: token,
+      notification: {
+        title,
+        body,
+      },
+      
+    });
+
+    console.log('notification sent successfuly ✅', response);
+    // يمكنك هنا تسجيل النجاح في قاعدة البيانات أو سجلات الخادم
+    return response;
+
+  } catch (error:any) {
+    console.error('An error occured while sending the notifcation❌', error);
+    if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
+        console.log(`this token is not valid anymore and should be deleted: ${token}`);
+    }
+    
+    throw error;
+  }
+}

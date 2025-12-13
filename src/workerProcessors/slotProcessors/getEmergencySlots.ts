@@ -1,7 +1,7 @@
 import { ParkingSlot as MongoParkingSlot } from "../../mongo_Models/parkingSlot.js"; // Alias for clarity
 import {prisma} from '../../routes/prsimaForRouters.js';
 import { SlotStatus } from "../../types/parkingEventTypes.js";
-import { SlotType } from "../../generated/prisma/index.js"; // Use Prisma enum
+import { SlotType } from "../../generated/prisma/client.js"; // Use Prisma enum
 
 export const getAvailableEmergencySlotId = async (): Promise<string | null> => { // Renamed for clarity
     // 1. هات IDs أماكن الطوارئ من Prisma

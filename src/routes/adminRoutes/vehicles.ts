@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { prisma } from "../prsimaForRouters.js";
-import type { Vehicle } from "../../generated/prisma/index.js";
+import type { Vehicle } from "../../generated/prisma/client.js";
 const router = Router();
 
 /* ---------------- GET ALL VEHICLES ADMIN ---------------- */

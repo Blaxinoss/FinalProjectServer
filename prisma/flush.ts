@@ -1,4 +1,4 @@
-// import { PrismaClient } from "../src/generated/prisma/index.js";
+// import { PrismaClient } from "../src/generated/prisma/client.js";
 // let prisma = new PrismaClient();
 // async function flushDatabase() {
 //   // List all your models here

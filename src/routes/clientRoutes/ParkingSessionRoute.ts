@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import type { Request,Response } from "express";
 import { prisma } from '../prsimaForRouters.js';
-import { ParkingSessionStatus } from "../../generated/prisma/index.js";
+import { ParkingSessionStatus } from "../../generated/prisma/client.js";
 import { getMaximumExtensionTime } from "../../services/getMaximumExtensionTime.js";
 import {  sessionLifecycleQueue } from "../../queues/queues.js";
 const router = Router();

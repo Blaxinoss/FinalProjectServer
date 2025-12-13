@@ -1,5 +1,3 @@
-version '3.8'
-
 
 services:
   my-redis-queue:
@@ -7,20 +5,24 @@ services:
     restart: always
     volumes:
       - redis_data:/data
-    deploy:
-       resources:
-          limits:
-             memory:200M
-
+      
   backend_app:
     container_name: backend_app
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+      - DATABASE_URL=${DATABASE_URL}
+    
     ports:
       - "3000:3000"
     depends_on:
       - my-redis-queue
-    
+
     env_file:
       - .env
     
-    restart: always
+    restart: always   
+
+volumes:
+  redis_data:

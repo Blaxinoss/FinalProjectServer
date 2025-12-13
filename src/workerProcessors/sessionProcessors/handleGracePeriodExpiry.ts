@@ -1,9 +1,9 @@
 import { Job } from 'bullmq';
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import {prisma} from '../../routes/prsimaForRouters.js';
-import { ParkingSessionStatus } from "../../generated/prisma/index.js";
+import { ParkingSessionStatus } from "../../generated/prisma/client.js";
 import { AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
-// import { sendPushNotification } from '../../services/notifications.js'; // 1. استدعاء دالة الإشعارات
+ import { sendFCMNotification } from '../../services/notifications.js'; // 1. استدعاء دالة الإشعارات
 import { Alert } from '../../mongo_Models/alert.js';
 // 2. (اختياري) استدعاء دالة إرسال تنبيه للداش بورد (عبر WebSocket أو MQTT)
 // import { sendAlertToDashboard } from '../services/dashboardService.js'; 
@@ -18,7 +18,8 @@ export const handleGracePeriodExpiry = async (job: Job) => {
     try {
         // --- 1. جلب الجلسة من Prisma ---
         const session = await prisma.parkingSession.findUnique({
-            where: { id: parkingSessionId }
+            where: { id: parkingSessionId },
+            include:{user:{select:{notificationToken:true}}}
         });
 
         // --- 2. التحقق الأولي (هل الجلسة ما زالت نشطة؟) ---
@@ -73,11 +74,17 @@ if (slotStatus?.status !== SlotStatus.OCCUPIED) {
             });
 
             // 2. إرسال تنبيه فوري للمستخدم
-            // await sendPushNotification(
-            //     session.userId,
-            //     "‼️ Penalty Time Started",
-            //     "Your grace period has ended, and penalty time has started for your parking session."
-            // );
+            if (session.user.notificationToken) {
+             await sendFCMNotification(
+                 session.user.notificationToken,
+             "‼️ Penalty Time Started",
+                 "Your grace period has ended, and penalty time has started for your parking session."
+             );
+
+             } else {
+    console.warn(`No notification token found for user in session ${session.id}`);
+}
+             
 
             // 3. (اختياري) إرسال تنبيه للداش بورد
             await Alert.create({

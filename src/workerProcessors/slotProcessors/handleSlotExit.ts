@@ -1,6 +1,6 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { prisma } from "../../routes/prsimaForRouters.js";
-import { ParkingSessionStatus } from "../../generated/prisma/index.js";
+import { ParkingSessionStatus } from "../../generated/prisma/client.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Import queue
 import { paymentQueue } from "../../queues/queues.js"; // Import payment queue

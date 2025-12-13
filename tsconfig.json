@@ -19,6 +19,7 @@
     "declaration": true,
     "declarationMap": true,
     // Stricter Typechecking Options
+    
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     // "allowSyntheticDefaultImports": true,
@@ -39,5 +40,6 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-  }
+  },
+  "include": ["src/**/*"],
 }
