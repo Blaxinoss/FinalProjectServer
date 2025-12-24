@@ -13,8 +13,8 @@ import { redisWorker } from '../../workers/consumer.js';
 /**
  * 🚪 الدالة الرئيسية التي تتعامل مع طلبات الدخول من البوابة (بنمط القرار النهائي).
  */
-export const handleGateEntryRequest = async (job: Job) => {
-    const { plateNumber, requestId } = job.data;
+export const  handleGateEntryRequest = async (job: Job) => {
+    const { plateNumber, requestId,timestamp,gate="gate1" } = job.data;
     
     // 1. تعريف متغيرات القرار النهائي
     let decision = 'DENY_ENTRY'; // القيمة الافتراضية هي الرفض
@@ -204,6 +204,8 @@ export const handleGateEntryRequest = async (job: Job) => {
         const responsePayload = JSON.stringify({
             requestId,
             decision,
+            gate,
+            plateNumber,
             reason,
             message,
             slotName,

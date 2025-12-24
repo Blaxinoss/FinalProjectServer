@@ -8,7 +8,7 @@ import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js"; // 
 const mqttClient = await getMQTTClient_IN_WORKER();
 
 export const handleGateExitRequest = async (job: Job) => {
-    const { plateNumber, requestId } = job.data;
+    const { plateNumber, requestId,timestamp,gate="gate2" } = job.data;
 
     // ⬅️ القيمة الافتراضية بقت الرفض (أكثر أمانًا)
     let decision = 'DENY_EXIT';
@@ -140,6 +140,7 @@ export const handleGateExitRequest = async (job: Job) => {
         const responsePayload = JSON.stringify({
             requestId,
             decision,
+            gate,
             reason,
             message,
             plateNumber,
