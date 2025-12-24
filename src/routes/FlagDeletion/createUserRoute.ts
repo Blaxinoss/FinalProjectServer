@@ -6,83 +6,65 @@ import bcrypt from 'bcrypt';
 
 router.post("/", async (req: Request, res: Response): Promise<void> => {
   try {
+    const { 
+      name, phone, email, 
+      NationalID, address, licenseNumber, 
+      licenseExpiry, role,
+      idToken // استقبل التوكن بدلاً من الباسورد
+    } = req.body;
 
-    // Note: paidAt, createdAt, updatedAt, and transactionStatus have defaults in the schema
-    const { name, phone,email,
-password,
-NationalID,
-address,
-licenseNumber,
-licenseExpiry,role } = req.body;
-
-
-    if (!name || !phone || !email || !password || !NationalID || !address || !licenseExpiry || !licenseNumber) {
-      res.status(400).json({
-        success: false,
-        message: "Missing required fields: parkingSessionId, amount, and paymentMethod",
-      });
+    // 1. التحقق من الحقول المطلوبة (بدون باسورد)
+    if (!name || !phone || !email || !idToken || !NationalID || !address || !licenseExpiry || !licenseNumber) {
+      res.status(400).json({ success: false, message: "Missing required fields" });
       return;
     }
 
-
-
-    if (typeof name !== 'string' || typeof phone !== 'string' || typeof email !== 'string'
-      || typeof password !== 'string' || typeof NationalID !== 'string' || typeof address !== 'string'
-      || typeof licenseExpiry !== 'string' || typeof licenseNumber !== 'string'
-    ) {
-        res.status(400).json({ success: false, message: "Invalid data types for one or more fields" });
-        return;
+    // 2. التحقق من صحة التوكن واستخراج الـ UID من فايربيز
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (authError) {
+      res.status(401).json({ success: false, message: "Invalid Firebase token" });
+      return;
     }
 
-        const hashedPassword = await bcrypt.hash(password, 10); 
+    const firebaseUid = decodedToken.uid;
 
-
+    // 3. إنشاء المستخدم في MariaDB بربطه بـ UUID فايربيز
     const newUser = await prisma.user.create({
       data: { 
           name,
           phone,
           email,
-          password:hashedPassword,
+          uuid: firebaseUid, // نخزن الـ UID القادم من فايربيز هنا
           NationalID,
           address,
-          licenseExpiry :new Date(licenseExpiry),
+          licenseExpiry: new Date(licenseExpiry),
           licenseNumber,
           ...(role && { role }), 
-
       },
-        select: {
+      select: {
           id: true,
           name: true,
           email: true,
-          NationalID: true,
-          createdAt: true,
-          address:true,
-          licenseExpiry:true,
-          licenseNumber:true,
-          role:true,
-
+          uuid: true, // مهم للتأكد من الربط
+          role: true,
+          createdAt: true
       }
     });
 
     res.status(201).json({
       success: true, 
-      message: "User created successfully",
+      message: "User synced with database successfully",
       user: newUser,
     });
   
   } catch (error: any) {
-    // معالجة خطأ الحقول الفريدة (Unique constraint)
     if (error.code === 'P2002') {
-          res.status(409).json({
-            code: error.code,
-            message: `A user with this ${error.meta.target} already exists.`,
-        });
+        res.status(409).json({ message: `Unique constraint failed on: ${error.meta.target}` });
         return;
     }
-    res.status(500).json({
-      code: error.code || null,
-      message: `Error while creating the user: ${error.message || "Unknown error"}`,
-    });
+    res.status(500).json({ message: error.message });
   }
 });
 
