@@ -36,7 +36,7 @@ client.on("error", (err) => {
 });
 
 // Function to safely get MQTT client
-export const getMQTTClient_IN_WORKER = () => {
+export const getMQTTClient_IN_WORKER = async() => {
     if (client && client.connected) {
         return client;
     } else {
