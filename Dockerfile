@@ -52,7 +52,7 @@ RUN npm install --only=production
 # بما أن ملفاتك المصدرية في 'src'، فالناتج سيكون في 'dist/src' أو 'dist' حسب tsconfig
 # سنفترض أن الملفات النهائية موجودة في مجلد 'dist' الرئيسي
 COPY --from=builder /app/dist ./dist
-
+ 
 # 2. نسخ ملفات Prisma الضرورية للتشغيل
 # * الملفات التنفيذية والبيانات الثنائية (Prisma Engine)
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client

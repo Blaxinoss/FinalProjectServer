@@ -24,5 +24,24 @@ services:
     
     restart: always   
 
+
+  worker_app:
+      container_name: worker_app
+      build:
+        context: .
+        dockerfile: Dockerfile
+        args:
+          - DATABASE_URL=${DATABASE_URL}
+      # هنا بقى السحر: بنعمل Override للأمر اللي في الـ Dockerfile
+      command: npm run worker
+      depends_on:
+        - my-redis-queue
+        - backend_app
+      env_file:
+        - .env
+      restart: always
+
+
 volumes:
   redis_data:
+
