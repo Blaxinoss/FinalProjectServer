@@ -29,7 +29,7 @@ export const config = {
     key: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-private.pem.key')),
     cert: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-certificate.pem.crt')),
     ca: fs.readFileSync(path.join(CERT_DIR,'AmazonRootCA1.pem')),
-    clientId: `BackendServer`,
+    clientId: `BackendServer-${Math.random().toString(16).substr(2, 8)}`,
     clean: true,
     protocolId:'MQTT',
     reconnectPeriod: 5000,
