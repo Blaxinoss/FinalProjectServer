@@ -58,7 +58,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # * نسخ ملف schema.prisma (ضروري لتشغيل Prisma Client)
-COPY prisma/schema.prisma ./prisma/schema.prisma
+COPY prisma ./prisma/
 
 # ملاحظة: إذا كنت تستخدم بيئة التشغيل 'dist/src/server.js'، قد تحتاج لتعديل المسارات قليلاً.
 
