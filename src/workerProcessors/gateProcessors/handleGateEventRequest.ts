@@ -23,7 +23,7 @@ export const  handleGateEntryRequest = async (job: Job) => {
     let message: string | null = null;
     let jobStatus: object = { success: false, decision, reason, slotName };
 
-    const mqttClient = getMQTTClient_IN_WORKER();
+    const mqttClient = await getMQTTClient_IN_WORKER();
     const responseTopic = `garage/gate/event/response`;
 
     try {
