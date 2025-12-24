@@ -25,4 +25,4 @@ node_modules
 src/src/*
 prisma/migrations/*
 src/generated/prisma/*
-prisma/seed*.ts
+# prisma/seed*.ts
