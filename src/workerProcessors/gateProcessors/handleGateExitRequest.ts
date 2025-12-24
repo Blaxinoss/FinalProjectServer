@@ -5,7 +5,6 @@ import { getMQTTClient_IN_WORKER } from "../../workers/consumer.js";
 import { Alert } from "../../mongo_Models/alert.js"; // ⬅️ استيراد Alert
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js"; // ⬅️ استيراد أنواع Alert
 
-const mqttClient = await getMQTTClient_IN_WORKER();
 
 export const handleGateExitRequest = async (job: Job) => {
     const { plateNumber, requestId,timestamp,gate="gate2" } = job.data;
@@ -15,6 +14,7 @@ export const handleGateExitRequest = async (job: Job) => {
     let reason = 'UNHANDLED_ERROR';
     let message: string | null = null;
     let jobStatus: object = { success: false, decision, reason, plateNumber };
+    const mqttClient = await getMQTTClient_IN_WORKER();
 
     try {
         const vehicle = await prisma.vehicle.findUnique({
