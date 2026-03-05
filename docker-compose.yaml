@@ -1,47 +1,35 @@
-
 services:
   my-redis-queue:
     image: redis:alpine
     restart: always
     volumes:
       - redis_data:/data
-      
+
   backend_app:
     container_name: backend_app
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-      - DATABASE_URL=${DATABASE_URL}
-    
+    image: blaxinoss/fp_back:latest 
     ports:
       - "3000:3000"
     depends_on:
       - my-redis-queue
-
     env_file:
       - .env
-    
     restart: always   
 
-
   worker_app:
-      container_name: worker_app
-      build:
-        context: .
-        dockerfile: Dockerfile
-        args:
-          - DATABASE_URL=${DATABASE_URL}
-      # هنا بقى السحر: بنعمل Override للأمر اللي في الـ Dockerfile
-      command: npm run worker
-      depends_on:
-        - my-redis-queue
-        - backend_app
-      env_file:
-        - .env
-      restart: always
-
+    container_name: worker_app
+    image: blaxinoss/fp_back:latest
+    command: npm run worker
+    depends_on:
+      - my-redis-queue
+      - backend_app
+    env_file:
+      - .env
+    restart: always
 
 volumes:
   redis_data:
+
+
+
 

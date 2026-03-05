@@ -8,7 +8,7 @@ import { prisma } from '../routes/prsimaForRouters.js';
  * @returns الـ ID بتاع العميل في Stripe (اللي هو التوكن اللي هنحفظه).
  */
 export const createStripeCustomerAndSaveToken = async (userId: number, paymentMethodId: string) => {
-    
+
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("User not found");
 

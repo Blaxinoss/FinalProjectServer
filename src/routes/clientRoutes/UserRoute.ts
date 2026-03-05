@@ -1,31 +1,31 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createStripeCustomerAndSaveToken } from '../../services/stripeUserAdding.js';
 
 import { prisma } from "../prsimaForRouters.js";
+import { createSetupIntent } from "../../services/stripeUserAdding.js";
 
- //TODO
-   //  AUTH
-  //CHECK BUSINESS LOGIC
+//TODO
+//  AUTH
+//CHECK BUSINESS LOGIC
 
-  
+
 const router = Router();
 
 
 //
 router.get("/", async (req: Request, res: Response) => {
   try {
-     const userId = req.user?.id!;
+    const userId = req.user?.id!;
     const user = await prisma.user.findUnique({
-      where: { id:userId },
-      include: { ParkingSessions: true ,Vehicles:true},
+      where: { id: userId },
+      include: { ParkingSessions: true, Vehicles: true },
     });
 
-    res.status(200).json({user});
+    res.status(200).json({ user });
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while fetcching the user cars: ${error.message || "Unknown error"}`
+      message: `Error while fetcching the user cars: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -33,7 +33,6 @@ message: `Error while fetcching the user cars: ${error.message || "Unknown error
 
 router.delete("/", async (req: Request, res: Response): Promise<void> => {
   try {
-    
     const userId = req.user?.id!;
 
     const deletedUser = await prisma.user.delete({
@@ -47,7 +46,7 @@ router.delete("/", async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while deleting the user: ${error.message || "Unknown error"}`
+      message: `Error while deleting the user: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -55,16 +54,16 @@ message: `Error while deleting the user: ${error.message || "Unknown error"}`
 
 router.put("/", async (req: Request, res: Response): Promise<void> => {
   try {
-   
+
     const userId = req.user?.id!;
-const { name, address, licenseNumber, licenseExpiry } = req.body;
+    const { name, address, licenseNumber, licenseExpiry } = req.body;
 
 
-   const dataToUpdate = {
-        name,
-        address,
-        licenseNumber,
-        licenseExpiry: new Date(licenseExpiry) // (لازم نتأكد إنها تاريخ سليم)
+    const dataToUpdate = {
+      name,
+      address,
+      licenseNumber,
+      licenseExpiry: new Date(licenseExpiry) // (لازم نتأكد إنها تاريخ سليم)
     };
 
     const updatedUser = await prisma.user.update({
@@ -80,46 +79,55 @@ const { name, address, licenseNumber, licenseExpiry } = req.body;
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while updating the user: ${error.message || "Unknown error"}`
+      message: `Error while updating the user: ${error.message || "Unknown error"}`
     });
   }
 });
 
-router.post('/save-card', async (req, res) => {
-    try{
-    const { paymentMethodId } = req.body; // paymentMethodId بييجي من الفرونت إند (Stripe.js)
+// router.post('/save-card', async (req, res) => {
+//   try {
+//     const { paymentMethodId } = req.body; // paymentMethodId بييجي من الفرونت إند (Stripe.js)
 
- await createStripeCustomerAndSaveToken(req.user?.id!, paymentMethodId);
+//     await createStripeCustomerAndSaveToken(req.user?.id!, paymentMethodId);
 
-        res.status(200).json({ message: 'Card saved successfully!' });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
+//     res.status(200).json({ message: 'Card saved successfully!' });
+//   } catch (error: any) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
+router.get('/setup-intent', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const setupData = await createSetupIntent(req.user?.id!);
+
+    res.status(200).json(setupData);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 
 router.post('/register-push-token', async (req: Request, res: Response) => {
-    // ⚠️ يجب التأكد من أنك تستخرج الـ userId من رمز التوثيق (JWT) أو الـ Session
-    const userId = req.user?.id; // افترض أن هذا هو معرف المستخدم الذي تم توثيقه
-    const { token } = req.body; // استخراج التوكن من جسم الطلب
-    
-    if (!token || !userId) {
-        return res.status(400).send({ message: "Token and User ID are required." });
-    }
-    
-    try {
-        // استخدام Prisma لتحديث التوكن في حقل المستخدم
-        await prisma.user.update({
-            where: { id: userId },
-            data: { notificationToken: token },
-        });
+  const userId = req.user?.id;
+  const { token } = req.body;
 
-        res.status(200).send({ success: true, message: "Token updated successfully." });
+  if (!token || !userId) {
+    return res.status(400).send({ message: "Token and User ID are required." });
+  }
 
-    } catch (e) {
-        console.error("Error saving token:", e);
-        res.status(500).send({ success: false, message: "Failed to save token." });
-    }
+  try {
+    // استخدام Prisma لتحديث التوكن في حقل المستخدم
+    await prisma.user.update({
+      where: { id: userId },
+      data: { notificationToken: token },
+    });
+
+    res.status(200).send({ success: true, message: "Token updated successfully." });
+
+  } catch (e) {
+    console.error("Error saving token:", e);
+    res.status(500).send({ success: false, message: "Failed to save token." });
+  }
 });
 
 export default router;
