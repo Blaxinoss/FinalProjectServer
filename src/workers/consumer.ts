@@ -10,12 +10,13 @@ import { config } from "../configs/index.js";
 // You need to create these files/functions based on our previous logic
 import { handleGateEntryRequest } from "../workerProcessors/gateProcessors/handleGateEventRequest.js";
 import { handleDeviceStatus } from "../workerProcessors/systemProcessors/deviceStatusHandlers.js";
-import {  handleGracePeriodExpiry } from "../workerProcessors/sessionProcessors/handleGracePeriodExpiry.js";
+import { handleGracePeriodExpiry } from "../workerProcessors/sessionProcessors/handleGracePeriodExpiry.js";
 import { handleSessionExpiry } from "../workerProcessors/sessionProcessors/handleSessionExpiry.js";
 import { handleSlotEvent } from "../workerProcessors/slotProcessors/handleSlotEvent.js";
 import { handlePayment } from "../workerProcessors/paymentProcessors/handlePayment.js";
 import { connectRedis } from "../db&init/redis.js";
 import { handleGateExitRequest } from "../workerProcessors/gateProcessors/handleGateExitRequest.js";
+import { handleReservationNoShowCheck } from "../workerProcessors/reservationProcess/handleReservationWaitedSoLong.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
 
 export const redisWorker = await connectRedis();
@@ -36,7 +37,7 @@ client.on("error", (err) => {
 });
 
 // Function to safely get MQTT client
-export const getMQTTClient_IN_WORKER = async() => {
+export const getMQTTClient_IN_WORKER = async () => {
     if (client && client.connected) {
         return client;
     } else {
@@ -55,7 +56,7 @@ console.log("Initializing BullMQ Workers...");
 const gateWorker = new Worker('gate-queue', async (job: Job) => {
     if (job.name === 'gate-event-entry-request') {
         return handleGateEntryRequest(job); // From gateProcessor.js
-    }else if(job.name ==='gate-event-exit-request'){
+    } else if (job.name === 'gate-event-exit-request') {
         return handleGateExitRequest(job)
     }
     // Handle other job names if any in this queue
@@ -79,12 +80,14 @@ const sessionLifecycleWorker = new Worker('session-lifecycle-queue', async (job:
         return handleSessionExpiry(job); // From sessionProcessor.js
     } else if (job.name === 'check-grace-period-expiry') {
         return handleGracePeriodExpiry(job); // From sessionProcessor.js
+    } else if (job.name === 'check-reservation-not-moving') {
+        return handleReservationNoShowCheck(job);
     }
     // Handle other job names if any
 }, {
     connection,
     concurrency: 5,
-    
+
 });
 
 const paymentWorker = new Worker('payment-queue', async (job: Job) => {

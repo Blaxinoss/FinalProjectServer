@@ -25,11 +25,6 @@ router.get("/", async (req: Request, res: Response) => {
 
 
 
-/**
- * 1️⃣ الخطوة الأولى في الـ Onboarding: إنشاء الحساب وحقن الـ UUID
- * المسار: POST /api/users/signup
- * ⚠️ هذا الراوت (لا يمر) على الميدل وير، لأنه هو اللي بيكريت اليوزر أساساً
- */
 router.post("/signup", async (req: Request, res: Response): Promise<void> => {
   try {
     const {
@@ -49,8 +44,8 @@ router.post("/signup", async (req: Request, res: Response): Promise<void> => {
     let decodedToken;
     try {
       decodedToken = await admin.auth().verifyIdToken(idToken);
-    } catch (authError) {
-      res.status(401).json({ success: false, message: "Invalid Firebase token" });
+    } catch (authError: any) {
+      res.status(401).json({ success: false, message: `Invalid Firebase token ${authError?.message && ""}` });
       return;
     }
 

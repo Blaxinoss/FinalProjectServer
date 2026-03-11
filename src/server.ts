@@ -11,8 +11,6 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { gateQueue, paymentQueue, sessionLifecycleQueue, slotEventQueue, systemQueue } from "./queues/queues.js";
 import { ExpressAdapter } from "@bull-board/express";
 import "dotenv/config";
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
-import { PrismaClient } from "./generated/prisma/index.js";
 
 import cors from 'cors'
 
@@ -28,25 +26,14 @@ await mongoConnect();
 // await connectMySQL();
 // await getMySQLPool();
 
-const adapter = new PrismaMariaDb({
-    host: process.env.DATABASE_HOST ?? "localhost",
-    user: process.env.DATABASE_USER ?? "",
-    password: process.env.DATABASE_PASSWORD ?? "",
-    database: process.env.DATABASE_NAME ?? "",
-    connectionLimit: 20,
-    connectTimeout: 10000
-});
 
-const prisma = new PrismaClient({ adapter });
-console.log(prisma.$connect().then(() => { console.log("database sql ready prisma") }))
-
-await prisma.paymentTransaction.deleteMany();
-await prisma.parkingSession.deleteMany();
-await prisma.reservation.deleteMany();
-await prisma.vehicle.deleteMany();
-await prisma.parkingSlot.deleteMany();
-await prisma.user.deleteMany();
-console.log('database do ne')
+// await prisma.paymentTransaction.deleteMany();
+// await prisma.parkingSession.deleteMany();
+// await prisma.reservation.deleteMany();
+// await prisma.vehicle.deleteMany();
+// await prisma.parkingSlot.deleteMany();
+// await prisma.user.deleteMany();
+// console.log('database do ne')
 
 await connectMQTT();
 await connectRedis();
@@ -106,4 +93,3 @@ httpServer.listen(config.port, () => {
     console.log(`Server running on port ${config.port} at http://localhost:${config.port}`);
 });
 
-export { prisma };

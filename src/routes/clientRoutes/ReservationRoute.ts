@@ -1,16 +1,17 @@
 import { Router } from "express";
-import type { Request, Response} from 'express'
+import type { Request, Response } from 'express'
 import { prisma } from "../prsimaForRouters.js";
 
-import {CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS} from "../../constants/constants.js"
+import { CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS, MAX_RESERVATION_HOURS, NO_SHOW_PENALTY_AMOUNT, RESERVATION_CHECK_IF_IT_HAS_CONTINUE } from "../../constants/constants.js"
 import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../../generated/prisma/client.js";
 import { stripe } from "../../services/stripe.js";
+import { sessionLifecycleQueue } from "../../queues/queues.js";
 
 //TODO
 // import { authMiddleware } from "../middleware/auth"; // ستحتاج إلى middleware للتحقق من هوية المستخدم
- //TODO
-   //  AUTH
-  //CHECK BUSINESS LOGIC
+//TODO
+//  AUTH
+//CHECK BUSINESS LOGIC
 
 
 const router = Router();
@@ -18,156 +19,153 @@ const router = Router();
 // المسار: POST /reservations
 // داخل ملف ReservationRoutes.ts
 
-
 router.post("/", async (req: Request, res: Response) => {
-  // افترض أن لديك middleware يضيف المستخدم للـ request
-  // const userId = req.user.id;
-  const userId = req.user?.id!
-  const { plateNumber, startTime, endTime,paymentTypeDecision} = req.body;
-
+  const userId = req.user?.id!;
+  const { plateNumber, startTime, endTime, paymentTypeDecision, paymentMethodId } = req.body;
   let paymentIntentId: string | null = null;
-  
+
   try {
-    // --- 🛡️ قسم التحقق من الصحة (Validation) ---
+    // 1. --- 🛡️ الأساسيات (Basic Validation) ---
     if (!plateNumber || !startTime || !endTime || !paymentTypeDecision) {
       return res.status(400).json({ error: "All fields are required." });
     }
-    const user = await prisma.user.findUnique({ where: { id: userId }, include: { Vehicles: true } });
-    const vehicle = user?.Vehicles.find((v:{plate:any})=> v.plate === plateNumber);
-    if (!vehicle) {
-      return res.status(403).json({ error: "This vehicle does not belong to the user." });
-    }
-
-    if(!user){
-            return res.status(403).json({ error: "This user does not exist." });
-
-    }
-
-    if(user.hasOutstandingDebt || vehicle.hasOutstandingDebt){
-      return res.status(403).json({error:`you have a debt that have not been paid`})
-    }
     const start = new Date(startTime);
     const end = new Date(endTime);
-    if (start >= end || start < new Date()) {
+    const now = new Date();
+    now.setSeconds(now.getSeconds() - 30); // Buffer للـ Network Latency
+
+    if (start >= end || start < now) {
       return res.status(400).json({ error: "Invalid time range." });
     }
 
-    if(paymentTypeDecision !== paymentMethod.CASH && !user?.paymentGatewayToken){
-      return res.status(400).json({error : "couldn't find the payment token, have you added a payment method ?"})
+    // 2. --- 👤 صلاحية اليوزر والعربة ---
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { Vehicles: true } });
+    if (!user) return res.status(404).json({ error: "User not found." });
+
+    const vehicle = user.Vehicles.find((v: any) => v.plate === plateNumber);
+    if (!vehicle) return res.status(403).json({ error: "This vehicle does not belong to the user." });
+
+    if (user.hasOutstandingDebt || vehicle.hasOutstandingDebt) {
+      return res.status(403).json({ error: "You have an outstanding debt that must be paid first." });
     }
-
-    if(paymentTypeDecision === paymentMethod.CARD){
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: HOLDAMOUNT_WHILE_RESERVATIONS,
-      currency:'egp',
-      customer:user?.paymentGatewayToken!,
-      capture_method:'manual',
-      confirm:true,
-      off_session:true,
-    })
-
-
-    if(!paymentIntent){
-      throw(`couldn't do the transaction to hold ${HOLDAMOUNT_WHILE_RESERVATIONS}`)
-    }else{
-      console.log("HOlding money went successfull, continung reservation")
-      paymentIntentId = paymentIntent.id;
+    const durationInHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    if (durationInHours > MAX_RESERVATION_HOURS) {
+      return res.status(400).json({ error: `You cannot reserve a slot for more than ${MAX_RESERVATION_HOURS} hours.` });
     }
-}
-
-    // --- 🧠 قسم البحث الذكي (فقط في Prisma) ---
-
-    // ✅ الخطوة 1: جلب كل المواقف المشغولة بالحجوزات في الفترة المطلوبة
-    const conflictingReservations = await prisma.reservation.findMany({
+    // 3. --- 🚫 منع الحجز المزدوج (Double Booking Check) ---
+    const existingActiveReservation = await prisma.reservation.findFirst({
       where: {
-        status: { not: 'CANCELLED' }, // تجاهل الحجوزات الملغاة
-        // الشرط الأساسي لتداخل الفترات الزمنية
-        startTime: { lt: end }, 
+        userId: userId,
+        status: ReservationsStatus.CONFIRMED,
+        endTime: { gt: new Date() } // حجز لسه مخلصش
+      }
+    });
+
+    if (existingActiveReservation) {
+      return res.status(400).json({ error: "You already have an active reservation." });
+    }
+
+    // 4. --- 🧠 البحث الذكي عن مكان (Smart Search) ---
+    // بنجيب الأماكن المشغولة سواء بحجز أو بجلسة ركن فعالية
+    const busyFromReservations = (await prisma.reservation.findMany({
+      where: {
+        status: { not: 'CANCELLED' },
+        startTime: { lt: end },
         endTime: { gt: start }
       },
       select: { slotId: true }
-    });
-    const busyFromReservations = conflictingReservations.map((r: { slotId: string }) => r.slotId);
+    })).map(r => r.slotId);
 
-    const conflictingSessions = await prisma.parkingSession.findMany({
-        where: {
-            status: ParkingSessionStatus.ACTIVE, // الجلسات النشطة فقط
-            // شوف الجلسات اللي "متوقع" تخلص بعد ما حجزنا "يبدأ"
-            expectedExitTime: { gt: start }
-        },
-        select: { slotId: true }
-    });
-    const busyFromSessions = conflictingSessions.map((s:{slotId:string}) => s.slotId);
-    // --- ⬆️ نهاية الإضافة ⬆️ ---
-
-
-    // ✅ الخطوة 1ج: دمج القائمتين (عشان نجيب كل المشغول)
-    const busySlotIds = [...new Set([...busyFromReservations, ...busyFromSessions])];
-    console.log("Total busy slots (Reservations + Sessions):", busySlotIds);
-
-    // ✅ الخطوة 2: ابحث عن موقف "فارغ حقًا" (Truly Free)
-    // هو أي موقف لا يظهر في قائمة المواقف المشغولة
-    // ملاحظة: ParkingSlot هنا يجب أن يكون من Prisma وليس MongoDB
-    const trulyFreeSlot = await prisma.parkingSlot.findFirst({
+    const busyFromSessions = (await prisma.parkingSession.findMany({
       where: {
-        id: { notIn: busySlotIds },
-        type: {not:'EMERGENCY'}
-      }
+        status: ParkingSessionStatus.ACTIVE,
+        expectedExitTime: { gt: start }
+      },
+      select: { slotId: true }
+    })).map(s => s.slotId);
+
+    const busySlotIds = [...new Set([...busyFromReservations, ...busyFromSessions])];
+
+    // محاولة إيجاد مكان فاضي تماماً
+    const trulyFreeSlot = await prisma.parkingSlot.findFirst({
+      where: { id: { notIn: busySlotIds }, type: { not: 'EMERGENCY' } }
     });
 
     let chosenSlotId: string | null = null;
     let isStacked = false;
 
     if (trulyFreeSlot) {
-      console.log(`✅ Truly free slot found: ${trulyFreeSlot.id}`);
       chosenSlotId = trulyFreeSlot.id;
-      isStacked = false;
     } else {
-      // ⚠️ الخطوة 3: إذا لم نجد، ابحث عن موقف "يمكن تكديسه" (Stackable)
-      console.log("No truly free slots. Searching for a stackable slot...");
-      const stackableReservation = await prisma.reservation.findFirst({
+      // محاولة البحث عن مكان بنظام التكديس (Stacking)
+      const stackable = await prisma.reservation.findFirst({
         where: {
-          // ابحث عن حجز ينتهي قبل بدء حجزنا الجديد (مع فترة أمان)
-          endTime: { 
-            lte: new Date(start.getTime() - GRACE_PERIOD * 60000)
-          },
+          endTime: { lte: new Date(start.getTime() - GRACE_PERIOD * 60000) },
           status: { not: 'CANCELLED' },
         },
-        orderBy: { endTime: 'desc' }, // اختر الحجز الذي ينتهي الأقرب لوقتنا
-        select: { slotId: true }
+        orderBy: { endTime: 'desc' },
       });
 
-      if (stackableReservation && !busySlotIds.includes(stackableReservation.slotId)) {
-        console.log(`⚠️ Found a stackable slot: ${stackableReservation.slotId}`);
-        chosenSlotId = stackableReservation.slotId;
+      if (stackable && !busySlotIds.includes(stackable.slotId)) {
+        chosenSlotId = stackable.slotId;
         isStacked = true;
       }
     }
 
-    // --- 💾 قسم إنشاء الحجز (Creation) ---
-    if (chosenSlotId) {
-      const reservation = await prisma.reservation.create({
-        data: {
-          userId: userId,
-          vehicleId: vehicle.id, // استخدم الـ ID الصحيح للمركبة
-          slotId: chosenSlotId,
-          startTime: start,
-          endTime:end,
-          paymentIntentId: paymentIntentId,
-          paymentType: paymentTypeDecision,
-          status: ReservationsStatus.CONFIRMED,
-          isStacked: isStacked // إضافة الـ flag
-        },
-      });
-      return res.status(201).json(reservation);
-    } else {
-      // ⛔ الخطوة 4: لم نجد أي حل
+    // 5. --- ⛔ التحقق النهائي من وجود مكان ---
+    if (!chosenSlotId) {
       return res.status(409).json({ error: "No available slots for the selected time." });
     }
 
-  } catch (error) {
-    console.error("Error creating reservation:", error);
-    res.status(500).json({ error: "Internal server error" });
+    // 6. --- 💳 عملية الدفع (Stripe Hold) ---
+    // بنعملها هنا "بعد" ما اتأكدنا إن فيه مكان، عشان منسحبش فلوس ونقول لليوزر "مفيش مكان معلش"
+    if (paymentTypeDecision === paymentMethod.CARD) {
+      if (!paymentMethodId || !user.paymentGatewayToken) {
+        return res.status(400).json({ error: "Card details missing or user not linked to Stripe." });
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: HOLDAMOUNT_WHILE_RESERVATIONS,
+        currency: 'egp',
+        customer: user.paymentGatewayToken,
+        payment_method: paymentMethodId,
+        capture_method: 'manual',
+        confirm: true,
+        off_session: true,
+      });
+
+      if (!paymentIntent) throw new Error("Stripe transaction failed.");
+      paymentIntentId = paymentIntent.id;
+    }
+
+    // 7. --- 💾 إنشاء الحجز في الداتابيز ---
+    const reservation = await prisma.reservation.create({
+      data: {
+        userId: userId,
+        vehicleId: vehicle.id,
+        slotId: chosenSlotId,
+        startTime: start,
+        endTime: end,
+        paymentIntentId: paymentIntentId,
+        paymentType: paymentTypeDecision,
+        status: ReservationsStatus.CONFIRMED,
+        isStacked: isStacked
+      },
+    });
+
+
+    await sessionLifecycleQueue.add("check-reservation-not-moving", {
+      reservationId: reservation.id
+    }, { delay: Math.max(new Date(reservation.startTime).getTime() - Date.now() + (RESERVATION_CHECK_IF_IT_HAS_CONTINUE * 60 * 1000), 0), jobId: `no_show_check_${reservation.id}` })
+
+    return res.status(201).json(reservation);
+
+  } catch (error: any) {
+    console.error("Critical Error:", error);
+    // لو حصل مشكلة بعد ما عملنا الـ Hold للفلوس، يفضل تعمل لها Cancel هنا
+    res.status(500).json({
+      error: `Internal server error: ${error.raw?.message || error.message || "Unknown error"}`
+    });
   }
 });
 
@@ -182,13 +180,15 @@ router.get("/", async (req: Request, res: Response) => {
     const userReservations = await prisma.reservation.findMany({
       where: {
         userId,
-        status: ReservationsStatus.CONFIRMED, // اعرض فقط الحجوزات المؤكدة والقادمة
-        startTime: {
-          gte: new Date(), // gte = greater than or equal to
+        status: ReservationsStatus.CONFIRMED,
+        endTime: {
+          gt: new Date(),
         },
+
       },
+      include: { vehicle: true },
       orderBy: {
-        startTime: "asc", // رتبهم حسب الأقرب موعداً
+        startTime: "asc",
       },
     });
 
@@ -199,80 +199,103 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// --- 3. Cancel a Reservation ---
+
 // المسار: POST /reservations/:id/cancel
-// FOR USER ONLY !!!!!!!!!
 router.post("/:id/cancel", async (req: Request, res: Response) => {
-  // TODO: يجب إضافة middleware للتحقق من أن المستخدم مسجل دخوله
+  if (!req.params.id) {
+    return res.status(400).json({ message: "reservation Id is not provided" });
+  }
 
-    if (!req.params.id) {
-      res.status(400).json({ message: "reservation Id is not provided" });
-      return;
-    }
   const userId = req.user?.id!;
-
   const reservationId = parseInt(req.params.id);
-  // const userId = req.user.id;
+
+  const { forceCancel } = req.body;
 
   try {
-    // 1. تأكد أن الحجز موجود أصلاً
+    // 1. --- 🛡️ التأكد من وجود الحجز وصلاحياته ---
     const reservation = await prisma.reservation.findUnique({
-      where: { id: reservationId,userId },
+      where: { id: reservationId, userId },
     });
 
     if (!reservation) {
       return res.status(404).json({ error: "Reservation not found." });
     }
-
-    if(reservation.userId !== userId ){
-      return res.status(403).json({ error: "You are not authorized to cancel this reservation." });
-    }
-
-    if(reservation.status !== "CONFIRMED"){
+    if (reservation.status !== "CONFIRMED") {
       return res.status(400).json({ error: "Only CONFIRMED reservations can be cancelled." });
     }
 
-  if(reservation.paymentType === paymentMethod.CARD){
-    if (reservation.paymentIntentId) {
+    const now = new Date();
+    const cancellableDeadLine = new Date(reservation.startTime.getTime() - CANCELLABLE_PERIOD_MINUTES * 60000);
+    const isPastDeadline = now > cancellableDeadLine;
+
+    if (isPastDeadline && !forceCancel) {
+      return res.status(400).json({
+        error: `Reservations can only be cancelled for free up to ${CANCELLABLE_PERIOD_MINUTES} minutes before the start time.`,
+        requiresForceCancel: true
+      });
+    }
+
+    if (reservation.paymentType === paymentMethod.CARD && reservation.paymentIntentId) {
       try {
-        await stripe.paymentIntents.cancel(reservation.paymentIntentId);
-        console.log(`Successfully cancelled payment intent: ${reservation.paymentIntentId}`);
+        if (isPastDeadline && forceCancel) {
+          // الحالة الأولى: إلغاء إجباري (Force Cancel) -> سحب الغرامة
+          await stripe.paymentIntents.capture(reservation.paymentIntentId, {
+            amount_to_capture: NO_SHOW_PENALTY_AMOUNT * 100,
+          });
+          console.log(`Penalty captured for forced cancellation of reservation: ${reservation.id}`);
+
+          // // تسجيل العملية المادية
+          // await prisma.paymentTransaction.create({
+          //   data: {
+          //     userId: reservation.userId,
+          //     reservationId: reservation.id,
+          //     amount: NO_SHOW_PENALTY_AMOUNT,
+          //     currency: "EGP",
+          //     status: "SUCCESS",
+          //     type: "LATE_CANCELLATION_PENALTY", // نوع جديد للغرامة
+          //     paymentMethod: reservation.paymentType,
+          //     stripePaymentIntentId: reservation.paymentIntentId,
+          //     description: "Penalty fee for late cancellation",
+          //   }
+          // });
+        } else {
+          await stripe.paymentIntents.cancel(reservation.paymentIntentId);
+          console.log(`Successfully cancelled payment intent: ${reservation.paymentIntentId}`);
+        }
       } catch (stripeError: any) {
-        // لو فشل الإلغاء (ممكن يكون اتسحب قبل كده أو مشكلة في Stripe)
-        console.error("Error cancelling payment intent:", stripeError.message);
-        // ممكن تقرر توقف العملية أو تكمل (الأفضل نكمل طالما هنلغي الحجز)
-        // return res.status(500).json({ error: "Failed to release payment hold." });
+        console.error("Stripe error during cancellation:", stripeError.message);
+        return res.status(500).json({ error: "Failed to process payment cancellation." });
       }
     }
-}
-    const now = new Date();
-    const cancellableDeadLine= new Date(reservation.startTime.getTime() - CANCELLABLE_PERIOD_MINUTES * 60000);
 
-    if(now > cancellableDeadLine){
-      console.log("can't cancel now you passed the cancellable period");
-      return res.status(400).json({ error: `Reservations can only be cancelled up to ${CANCELLABLE_PERIOD_MINUTES} minutes before the start time.` });
-      //ممكن تضيف منطق لإلغاء الحجز مع غرامة مالية
-      //TODO after payment system implementation
-    }else{
-
-  const cancelledReservation = await prisma.reservation.update({
-      where: {
-        id: reservationId,
-      },
-      data: {
-        status: ReservationsStatus.CANCELLED,
-      },
+    // 4. --- 💾 تحديث حالة الحجز في الداتابيز ---
+    const cancelledReservation = await prisma.reservation.update({
+      where: { id: reservationId },
+      data: { status: ReservationsStatus.CANCELLED },
     });
-        res.status(200).json(cancelledReservation);
 
+    // 5. --- 🧹 مسح الجوب بتاعت الـ No-Show من الـ Queue ---
+    try {
+      const jobId = `no_show_check_${reservation.id}`;
+      const noShowJob = await sessionLifecycleQueue.getJob(jobId);
+      if (noShowJob) {
+        await noShowJob.remove();
+        console.log(`Successfully removed No-Show job: ${jobId}`);
+      }
+    } catch (queueError) {
+      console.error(`Error removing No-Show job for reservation ${reservation.id}:`, queueError);
     }
-  
+
+    res.status(200).json({
+      message: isPastDeadline ? "Reservation cancelled with penalty." : "Reservation cancelled successfully.",
+      reservation: cancelledReservation
+    });
+
   } catch (error) {
     console.error("Error cancelling reservation:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 export default router;

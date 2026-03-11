@@ -13,9 +13,9 @@ import { redisWorker } from '../../workers/consumer.js';
 /**
  * 🚪 الدالة الرئيسية التي تتعامل مع طلبات الدخول من البوابة (بنمط القرار النهائي).
  */
-export const  handleGateEntryRequest = async (job: Job) => {
-    const { plateNumber, requestId,timestamp,gate="gate1" } = job.data;
-    
+export const handleGateEntryRequest = async (job: Job) => {
+    const { plateNumber, requestId, timestamp, gate = "gate1" } = job.data;
+
     // 1. تعريف متغيرات القرار النهائي
     let decision = 'DENY_ENTRY'; // القيمة الافتراضية هي الرفض
     let reason = 'UNHANDLED_CASE';
@@ -41,39 +41,39 @@ export const  handleGateEntryRequest = async (job: Job) => {
             reason = 'OUTSTANDING_DEBT';
             message = 'This vehicle has unpaid fees. Please contact customer service to unlock.';
             decision = 'DENY_ENTRY';
-            
+
             // ارمي خطأ هنا عشان نوقف التنفيذ ونروح للـ finally
-            throw new Error(reason); 
+            throw new Error(reason);
         }
 
         const now = new Date();
         const gracePeriodStart = new Date(now.getTime() + GRACE_PERIOD_EARLY_ENTERANCE_MINUTES * 60000);
-        
-        console.log(await prisma.reservation.findMany({include: { vehicle: true }}));
+
+        console.log(await prisma.reservation.findMany({ include: { vehicle: true } }));
 
         const reservation = await prisma.reservation.findFirst({
-  where: {
-    vehicle: { plate: plateNumber },    
-    status: ReservationsStatus.CONFIRMED,
-    startTime: { lte: gracePeriodStart },
-    endTime: { gte: now },
-  },
-  include: { vehicle: true }
-  
-});
+            where: {
+                vehicle: { plate: plateNumber },
+                status: ReservationsStatus.CONFIRMED,
+                startTime: { lte: gracePeriodStart },
+                endTime: { gte: now },
+            },
+            include: { vehicle: true }
+
+        });
         console.log(reservation ? `Reservation found for plate ${plateNumber}: ${reservation.id}` : `No reservation found for plate ${plateNumber}.`);
         // =======================
         //  الحالة أ: يوجد حجز
         // =======================
         if (reservation) {
-            
-            
+
+
 
             console.log(`🔍 Found reservation ${reservation.id} for plate ${plateNumber}.`);
             const designatedSlotStatus = await ParkingSlot.findById(reservation.slotId).select('status').lean();
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
 
-            
+
             if (designatedSlotStatus?.status === SlotStatus.AVAILABLE) {
                 const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
                 await assignSlotAndStartSession(reservation, designatedSlot);
@@ -90,7 +90,7 @@ export const  handleGateEntryRequest = async (job: Job) => {
 
                 if (alternativeSlot) {
                     await assignSlotAndStartSession(reservation, alternativeSlot);
-                    
+
                     console.log(`✅ Stacked reservation relocated. Vehicle ${plateNumber} assigned to alternative slot ${alternativeSlot.id}.`);
                     // ✅ تعيين القرار بالنجاح مع مكان بديل
                     decision = 'ALLOW_ENTRY';
@@ -104,7 +104,7 @@ export const  handleGateEntryRequest = async (job: Job) => {
 
             } else {
                 reason = 'RESERVED_SLOT_UNAVAILABLE';
-                message = 'Designated slot is unavailable and reservation is not stackable,';   
+                message = 'Designated slot is unavailable and reservation is not stackable,';
             }
         }
         // =======================
@@ -116,10 +116,10 @@ export const  handleGateEntryRequest = async (job: Job) => {
             if (!permission) {
                 reason = 'NO_RESERVATION_OR_PERMIT';
                 message = 'No walk-in permit found, have you scanned the QR code.';
-                
+
             } else {
                 console.log(`🅿️ Walk-in permit found for ${plateNumber}. Searching for a safe slot...`);
-                const { userId, vehicleId,expectedExitTime,paymentTypeDecision,paymentIntentId } = JSON.parse(permission);
+                const { userId, vehicleId, expectedExitTime, paymentTypeDecision, paymentIntentId } = JSON.parse(permission);
                 const expectedExitTimeDate = new Date(expectedExitTime); // Convert string to Date
                 const safeSlot = await findSafeAlternativeSlot();
 
@@ -127,59 +127,65 @@ export const  handleGateEntryRequest = async (job: Job) => {
                     reason = 'GARAGE_IS_FULL';
                     message = 'Sorry, the garage is currently full.'; // Add message for this case
                 } else {
-                    
+
 
                     const now = new Date(); // Get current time precisely here
-            const exitDelay = expectedExitTimeDate.getTime() - now.getTime();
-            const occupancyCheckDelay = OCCUPANCY_CHECK_DELAY_AFTER_ENTRY; // Use constant
+                    const exitDelay = expectedExitTimeDate.getTime() - now.getTime();
+                    const occupancyCheckDelay = OCCUPANCY_CHECK_DELAY_AFTER_ENTRY; // Use constant
 
-            // 2. Create Delayed Jobs
-            const exitJob = await sessionLifecycleQueue.add(
-                'check-session-expiry',
-                { vehicleId }, // Initial data, will update with sessionId
-                { delay: exitDelay > 0 ? exitDelay : 0 }
-            );
+                    // 2. Create Delayed Jobs
+                    const exitJob = await sessionLifecycleQueue.add(
+                        'check-session-expiry',
+                        { vehicleId }, // Initial data, will update with sessionId
+                        { delay: exitDelay > 0 ? exitDelay : 0 }
+                    );
 
-            const occupancyCheckJob = await sessionLifecycleQueue.add(
-                'check-actual-occupancy',
-                { vehicleId }, // Initial data, will update with sessionId
-                { delay: occupancyCheckDelay }
-            );
+                    const occupancyCheckJob = await sessionLifecycleQueue.add(
+                        'check-actual-occupancy',
+                        { vehicleId }, // Initial data, will update with sessionId
+                        { delay: occupancyCheckDelay }
+                    );
 
-            if (!exitJob?.id || !occupancyCheckJob?.id) {
-                // Attempt to remove jobs if one failed
-                if(exitJob) await exitJob.remove();
-                if(occupancyCheckJob) await occupancyCheckJob.remove();
-                throw new Error('Failed to create necessary session jobs for walk-in.');
-            }
+                    if (!exitJob?.id || !occupancyCheckJob?.id) {
+                        // Attempt to remove jobs if one failed
+                        if (exitJob) await exitJob.remove();
+                        if (occupancyCheckJob) await occupancyCheckJob.remove();
+                        throw new Error('Failed to create necessary session jobs for walk-in.');
+                    }
 
-            if(paymentTypeDecision === paymentMethod.CARD && !paymentIntentId) {
-                // Attempt to remove jobs if one failed
-                if(exitJob) await exitJob.remove();
-                if(occupancyCheckJob) await occupancyCheckJob.remove();
-                throw new Error('payment should be with cart and there is not payment Id in the redis permission.');
-            }
+                    if (paymentTypeDecision === paymentMethod.CARD && !paymentIntentId) {
+                        // Attempt to remove jobs if one failed
+                        if (exitJob) await exitJob.remove();
+                        if (occupancyCheckJob) await occupancyCheckJob.remove();
+                        throw new Error('payment should be with cart and there is not payment Id in the redis permission.');
+                    }
 
-                    const newSession = await prisma.parkingSession.create({ data:
-                         { userId, vehicleId, slotId: safeSlot.id,expectedExitTime, 
-                            entryTime: now,exitCheckJobId:exitJob.id,
-                            occupancyCheckJobId:occupancyCheckJob.id, status: ParkingSessionStatus.ACTIVE,
-                            paymentType:paymentTypeDecision,
+                    const newSession = await prisma.parkingSession.create({
+                        data:
+                        {
+                            userId, vehicleId, slotId: safeSlot.id, expectedExitTime,
+                            entryTime: now, exitCheckJobId: exitJob.id,
+                            occupancyCheckJobId: occupancyCheckJob.id, status: ParkingSessionStatus.ACTIVE,
+                            paymentType: paymentTypeDecision,
                             paymentIntentId,
-                        } });
-                    
+                        }
+                    });
+
                     // 4. Update Jobs with Session ID
-            await exitJob.updateData({ ...exitJob.data, parkingSessionId: newSession.id });
-            await occupancyCheckJob.updateData({ ...occupancyCheckJob.data, parkingSessionId: newSession.id });
+                    await exitJob.updateData({ ...exitJob.data, parkingSessionId: newSession.id });
+                    await occupancyCheckJob.updateData({ ...occupancyCheckJob.data, parkingSessionId: newSession.id });
 
-                    await ParkingSlot.updateOne({ _id: safeSlot.id }, { $set: { status: SlotStatus.ASSIGNED ,current_vehicle:{
-                        plate_number:plateNumber,
-                        occupied_since:null,
-                        reservation_id:null,
+                    await ParkingSlot.updateOne({ _id: safeSlot.id }, {
+                        $set: {
+                            status: SlotStatus.ASSIGNED, current_vehicle: {
+                                plate_number: plateNumber,
+                                occupied_since: null,
+                                reservation_id: null,
 
-                    }} ,
-                    // Optional: $inc stats.total_uses_today if assignment counts
-                });
+                            }
+                        },
+                        // Optional: $inc stats.total_uses_today if assignment counts
+                    });
                     await redisWorker.del(`entry-permit:${plateNumber}`);
 
                     // ✅ تعيين القرار بالنجاح للـ Walk-in
@@ -190,14 +196,14 @@ export const  handleGateEntryRequest = async (job: Job) => {
                 }
             }
         }
-        
-        jobStatus = { success: true, decision, reason, slotName,message };
+
+        jobStatus = { success: true, decision, reason, slotName, message };
 
     } catch (error: any) {
         console.error(`❌ CRITICAL ERROR in job ${job.id}: ${error.message}`);
         reason = 'INTERNAL_SERVER_ERROR'; // decision يبقى على قيمته الافتراضية 'DENY_ENTRY'
         jobStatus = { success: false, error: error.message };
-        
+
     } finally {
         // 2. إرسال القرار النهائي عبر MQTT
         // هذا الجزء سيعمل دائمًا، سواء نجحت العملية أو فشلت
