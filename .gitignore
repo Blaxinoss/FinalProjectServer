@@ -23,6 +23,5 @@ tmp/
 node_modules
 .env
 src/src/*
-prisma/migrations/*
 src/generated/prisma/*
 # prisma/seed*.ts
