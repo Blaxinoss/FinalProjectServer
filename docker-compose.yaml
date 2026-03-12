@@ -1,35 +1,56 @@
+version: "3.8"
+
 services:
+
   my-redis-queue:
-    image: redis:alpine
+    image: redis:7
     restart: always
     volumes:
       - redis_data:/data
 
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Asdqwe123564
+      MYSQL_DATABASE: garage
+      MYSQL_USER: Blax
+      MYSQL_PASSWORD: Asdqwe123564
+    volumes:
+      - db_data:/var/lib/mysql
+    # ports:
+    #   - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
   backend_app:
     container_name: backend_app
-    image: blaxinoss/fp_back:latest 
+    build: .
     ports:
       - "3000:3000"
     depends_on:
-      - my-redis-queue
-    env_file:
-      - .env
-    restart: always   
-
-  worker_app:
-    container_name: worker_app
-    image: blaxinoss/fp_back:latest
-    command: npm run worker
-    depends_on:
-      - my-redis-queue
-      - backend_app
+      db:
+        condition: service_healthy
+      my-redis-queue:
+        condition: service_started
+      mongo:
+        condition: service_started
     env_file:
       - .env
     restart: always
 
 volumes:
   redis_data:
-
-
-
-
+  db_data:
+  mongo_data:
