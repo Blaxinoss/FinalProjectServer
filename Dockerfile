@@ -27,23 +27,51 @@ RUN npm run build
 # -------------------------------------------------------------
 FROM node:20-bullseye AS final
 
-# تثبيت التبعيات النظامية اللازمة للتشغيل فقط (openssl)
+
 RUN apt-get update && apt-get install -y openssl
-# تعيين مجلد العمل
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 
 RUN npm install --only=production
 
+# Copy built app
 COPY --from=builder /app/dist ./dist
- 
 
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Copy ALL node_modules from builder (needed for tsx + prisma config at runtime)
+COPY --from=builder /app/node_modules ./node_modules
 
+# Copy prisma schema + config
 COPY prisma ./prisma/
-
+COPY prisma.config.ts ./prisma.config.ts
+COPY tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
-CMD [ "npm", "start" ]
+CMD sh -c "npx prisma migrate deploy && npm start"
+
+
+# FROM node:20-bullseye AS final
+
+# # تثبيت التبعيات النظامية اللازمة للتشغيل فقط (openssl)
+# RUN apt-get update && apt-get install -y openssl
+# # تعيين مجلد العمل
+# WORKDIR /app
+
+# COPY package.json package-lock.json ./
+
+# RUN npm install --only=production
+
+# COPY --from=builder /app/dist ./dist
+ 
+
+# COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
+# COPY prisma ./prisma/
+
+
+# EXPOSE 3000
+
+# # CMD [ "npm", "start" ]
+
