@@ -3,9 +3,11 @@ import type { Request, Response } from 'express'
 import { prisma } from "../prsimaForRouters.js";
 
 import { CANCELLABLE_PERIOD_MINUTES, GRACE_PERIOD, HOLDAMOUNT_WHILE_RESERVATIONS, MAX_RESERVATION_HOURS, NO_SHOW_PENALTY_AMOUNT, RESERVATION_CHECK_IF_IT_HAS_CONTINUE } from "../../constants/constants.js"
-import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from "../../generated/prisma/client.js";
+import { ParkingSessionStatus, paymentMethod, ReservationsStatus, TransactionStatus } from "../../generated/prisma/client.js";
 import { stripe } from "../../services/stripe.js";
 import { sessionLifecycleQueue } from "../../queues/queues.js";
+import { SlotStatus } from "../../types/parkingEventTypes.js";
+import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 
 //TODO
 // import { authMiddleware } from "../middleware/auth"; // ستحتاج إلى middleware للتحقق من هوية المستخدم
@@ -21,20 +23,20 @@ const router = Router();
 
 router.post("/", async (req: Request, res: Response) => {
   const userId = req.user?.id!;
-  const { plateNumber, startTime, endTime, paymentTypeDecision, paymentMethodId } = req.body;
+  const { plateNumber, startTime, endTime, paymentTypeDecision, paymentMethodId, isImmediate } = req.body;
   let paymentIntentId: string | null = null;
 
   try {
     // 1. --- 🛡️ الأساسيات (Basic Validation) ---
-    if (!plateNumber || !startTime || !endTime || !paymentTypeDecision) {
+    if (!plateNumber || !startTime || !endTime || !paymentTypeDecision || (!startTime && !isImmediate)) {
       return res.status(400).json({ error: "All fields are required." });
     }
-    const start = new Date(startTime);
+    const start = isImmediate ? new Date() : new Date(startTime);
     const end = new Date(endTime);
     const now = new Date();
     now.setSeconds(now.getSeconds() - 30); // Buffer للـ Network Latency
 
-    if (start >= end || start < now) {
+    if (start >= end || (start < now && !isImmediate)) {
       return res.status(400).json({ error: "Invalid time range." });
     }
 
@@ -117,6 +119,8 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "No available slots for the selected time." });
     }
 
+
+
     // 6. --- 💳 عملية الدفع (Stripe Hold) ---
     // بنعملها هنا "بعد" ما اتأكدنا إن فيه مكان، عشان منسحبش فلوس ونقول لليوزر "مفيش مكان معلش"
     if (paymentTypeDecision === paymentMethod.CARD) {
@@ -152,6 +156,20 @@ router.post("/", async (req: Request, res: Response) => {
         isStacked: isStacked
       },
     });
+
+
+
+    if (isImmediate) {
+      await ParkingSlot.updateOne({
+        _id: chosenSlotId
+      }, {
+        $set: {
+          status: SlotStatus.RESERVED,
+          "current_vehicle.reservation_id": reservation.id
+        }
+      })
+      console.log(`🗺️ Slot ${chosenSlotId} marked as RESERVED for immediate booking.`);
+    }
 
 
     await sessionLifecycleQueue.add("check-reservation-not-moving", {
@@ -195,6 +213,34 @@ router.get("/", async (req: Request, res: Response) => {
     res.status(200).json(userReservations);
   } catch (error) {
     console.error("Error fetching user reservations:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+router.get("/active", async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id!;
+
+    // استخدمنا findFirst بدل findMany
+    const activeReservation = await prisma.reservation.findFirst({
+      where: {
+        userId,
+        status: ReservationsStatus.CONFIRMED,
+        endTime: {
+          gt: new Date(), // حجز لسه مخلصش
+        },
+      },
+      include: { vehicle: true },
+      orderBy: {
+        startTime: "asc", // هات أقرب حجز قادم
+      },
+    });
+
+    // هيرجع Object الحجز مباشرة، أو null لو معندوش حجز حالي
+    res.status(200).json(activeReservation);
+  } catch (error) {
+    console.error("Error fetching active reservation:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -244,20 +290,17 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
           });
           console.log(`Penalty captured for forced cancellation of reservation: ${reservation.id}`);
 
-          // // تسجيل العملية المادية
-          // await prisma.paymentTransaction.create({
-          //   data: {
-          //     userId: reservation.userId,
-          //     reservationId: reservation.id,
-          //     amount: NO_SHOW_PENALTY_AMOUNT,
-          //     currency: "EGP",
-          //     status: "SUCCESS",
-          //     type: "LATE_CANCELLATION_PENALTY", // نوع جديد للغرامة
-          //     paymentMethod: reservation.paymentType,
-          //     stripePaymentIntentId: reservation.paymentIntentId,
-          //     description: "Penalty fee for late cancellation",
-          //   }
-          // });
+          // تسجيل العملية المادية
+          await prisma.paymentTransaction.create({
+            data: {
+              userId: reservation.userId,
+              reservationId: reservation.id,
+              amount: NO_SHOW_PENALTY_AMOUNT,
+              transactionStatus: TransactionStatus.UNPAID_EXIT,
+              paymentMethod: reservation.paymentType,
+              stripeTransactionId: reservation.paymentIntentId,
+            }
+          });
         } else {
           await stripe.paymentIntents.cancel(reservation.paymentIntentId);
           console.log(`Successfully cancelled payment intent: ${reservation.paymentIntentId}`);
@@ -273,6 +316,20 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
       where: { id: reservationId },
       data: { status: ReservationsStatus.CANCELLED },
     });
+
+    await ParkingSlot.updateOne(
+      { _id: reservation.slotId },
+      {
+        $set: {
+          status: SlotStatus.AVAILABLE,
+          "current_vehicle.plate_number": null,
+          "current_vehicle.reservation_id": null,
+          "current_vehicle.occupied_since": null
+        }
+      }
+    );
+
+    console.log(`♻️ Slot ${reservation.slotId} is now AVAILABLE after cancellation.`);
 
     // 5. --- 🧹 مسح الجوب بتاعت الـ No-Show من الـ Queue ---
     try {

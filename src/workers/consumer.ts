@@ -17,10 +17,11 @@ import { handlePayment } from "../workerProcessors/paymentProcessors/handlePayme
 import { connectRedis } from "../db&init/redis.js";
 import { handleGateExitRequest } from "../workerProcessors/gateProcessors/handleGateExitRequest.js";
 import { handleReservationNoShowCheck } from "../workerProcessors/reservationProcess/handleReservationWaitedSoLong.js";
+import { createEmitters } from "../db&init/redisWorkerEmitterWithClient.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
 
 export const redisWorker = await connectRedis();
-
+createEmitters();
 // --- Initialize DBs and MQTT ---
 await mongoConnect();
 const client = mqtt.connect(config.mqttBroker, config.mqttOptions);

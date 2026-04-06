@@ -1,4 +1,3 @@
-// mongo-seed.js
 import mongoose, { Model } from 'mongoose';
 // Adjust the path to your actual types file
 
@@ -22,17 +21,17 @@ const ParkingSlotSchema = new mongoose.Schema<IParkingSlot>({
         reservation_id: { type: String, default: null }
     },
     conflict_details: {
-         _id: false,
+        _id: false,
         expected_plate: { type: String, default: null },
         assigned_session_id: { type: String, default: null }
     },
     violating_vehicle: {
-         _id: false,
+        _id: false,
         plate_number: { type: String, trim: true, default: null },
         occupied_since: { type: Date, default: null }
     },
     stats: {
-         _id: false,
+        _id: false,
         total_uses_today: { type: Number, default: 0 },
         average_duration_minutes: { type: Number, default: 0 },
         last_cleaned: { type: Date, default: null }

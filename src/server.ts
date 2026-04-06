@@ -2,7 +2,6 @@ import express from "express";
 import type { Application } from "express";
 import { config } from "./configs/index.js";
 import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
 import { connectRedis, getRedisClient } from "./db&init/redis.js";
 import { mongoConnect } from "./db&init/mongo.js";
 import { connectMQTT } from "./db&init/mqtt.js";
@@ -11,7 +10,9 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { gateQueue, paymentQueue, sessionLifecycleQueue, slotEventQueue, systemQueue } from "./queues/queues.js";
 import { ExpressAdapter } from "@bull-board/express";
 import "dotenv/config";
-
+import { getSocketServer, initSocket } from "./db&init/socket.js";
+import mainRouter from "./routes/realRouters.js";
+import { createEmitters } from "./db&init/redisWorkerEmitterWithClient.js";
 import cors from 'cors'
 
 const app: Application = express();
@@ -19,7 +20,6 @@ const httpServer = createServer(app);
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath("/admin/queues");
 
-const io = new SocketIOServer(httpServer);
 app.use(express.json());
 
 await mongoConnect();
@@ -36,11 +36,11 @@ await mongoConnect();
 // console.log('database do ne')
 
 await connectMQTT();
-await connectRedis();
-await getRedisClient();
+await connectRedis(); // new Redis.Redis === 1 + get Method
+await getRedisClient(); // the same client as above from the get Method
+initSocket(httpServer) // redis.duplicate() new Redis.Redis === 2 + attach the adapter with the socket server
+createEmitters(); // create Emitter with the same client as above from the get Method
 
-import mainRouter from "./routes/realRouters.js";
-// import { userRole } from "./generated/prisma/client.js";
 
 createBullBoard({
     queues: [new BullMQAdapter(systemQueue),
@@ -58,9 +58,6 @@ createBullBoard({
 app.use(cors())
 app.use("/admin/queues", serverAdapter.getRouter());
 
-// app.use('/', (req, res) => {
-//     res.send('Welcome to the Parking Management System API');
-// });
 
 app.use('/api', mainRouter);
 
@@ -68,28 +65,14 @@ app.get('/sayhi', (req, res) => {
     res.send('Hello from our parking system Api ^^');
 })
 
-// if(await prisma.user.findUnique({where:{email:"abdullahismael078@gmail.com"}})===null){
-// await prisma.user.create({
-//     data:{
-//         name:"Test User",
-//         email:"abdullahismael078@gmail.com",
-//         phone:"01022223333",
-//         NationalID:"12345678901234",
-//         address:"123 Test St, Test City",
-//         licenseNumber:"D1234567",
-//         licenseExpiry:new Date("2030-12-31"),
-//         role:userRole.ADMIN,
-//         uuid:"ekE0K8svqrXptFhCyfSoZcig7ko2",
-//     }
-// })
-// }
 
-io.on("connection", (socket) => {
-    console.log("Socket connected:", socket.id);
-    socket.on("disconnect", () => console.log("Socket disconnected:", socket.id));
-});
+
 
 httpServer.listen(config.port, () => {
     console.log(`Server running on port ${config.port} at http://localhost:${config.port}`);
+    const socketIO = getSocketServer()
+    if (socketIO) {
+        console.log("✅ Socket.io Engine is attached and waiting for connections.");
+    }
 });
 

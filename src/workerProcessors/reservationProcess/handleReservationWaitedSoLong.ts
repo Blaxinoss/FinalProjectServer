@@ -1,30 +1,30 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../routes/prsimaForRouters.js'; // تأكد من المسار
-import { ReservationsStatus, ParkingSessionStatus } from "../../generated/prisma/client.js";
+import { ReservationsStatus, ParkingSessionStatus, TransactionStatus } from "../../generated/prisma/client.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import { Alert } from "../../mongo_Models/alert.js";
 import { stripe } from "../../services/stripe.js";
 import { NO_SHOW_PENALTY_AMOUNT } from '../../constants/constants.js';
 import { ParkingSlot } from '../../mongo_Models/parkingSlot.js';
+import { getEmitter } from '../../db&init/redisWorkerEmitterWithClient.js';
+import { CANCELED_RESERVATION_EMITTER_MESSAGE } from '../../constants/constants.js';
 // import { NO_SHOW_PENALTY_AMOUNT } from "../../constants/constants.js";
 
 export const handleReservationNoShowCheck = async (job: Job) => {
     const { reservationId } = job.data;
+    const Emitter = getEmitter()
 
     try {
-        // 1. نجيب الحجز من الداتابيز
         const reservation = await prisma.reservation.findUnique({
             where: { id: reservationId }
         });
 
-        // 2. لو الحجز مش موجود أو حالته اتغيرت (اتلغى أو اكتمل)، نوقف الشغل
+
         if (!reservation || reservation.status !== ReservationsStatus.CONFIRMED) {
             console.log(`ReservationNoShow Job ${job.id}: Reservation ${reservationId} not active. No action needed.`);
             return;
         }
 
-        // 3. نتأكد هل اليوزر عمل Session (عدى من البوابة) ولا لأ؟
-        // بنبحث عن Active Session لنفس اليوزر ونفس العربية وفي وقت متقاطع مع الحجز
         const activeSession = await prisma.parkingSession.findFirst({
             where: {
                 userId: reservation.userId,
@@ -58,19 +58,85 @@ export const handleReservationNoShowCheck = async (job: Job) => {
                 }
             })
 
-            // b. سحب الغرامة من الـ Stripe Hold (لو كان دافع بالفيزا)
+
+            let penaltyPaid = false;
+            let paymentLink = null;
+            let currentTransactionStatus: TransactionStatus = TransactionStatus.PENDING;
+            let currentStripeId: string | null = null;
+
+            // 1. محاولة السحب (لو معاه فيزا فقط)
             if (reservation.paymentIntentId) {
                 try {
-                    // اسحب جزء من المبلغ كغرامة (أو المبلغ كله حسب البزنس لوجيك)
                     await stripe.paymentIntents.capture(reservation.paymentIntentId, {
                         amount_to_capture: NO_SHOW_PENALTY_AMOUNT * 100,
                     });
                     console.log(`Successfully captured penalty for No-Show reservation ${reservation.id}`);
+                    penaltyPaid = true; // 🟢 الدفع نجح
+                    currentTransactionStatus = TransactionStatus.COMPLETED;
+                    currentStripeId = reservation.paymentIntentId;
 
                 } catch (stripeError: any) {
-                    console.error(`Stripe Error in No-Show Job: ${stripeError.message}`);
+                    console.warn(`❌ Payment capture failed for No-Show ${reservation.id}:`, stripeError.message);
+                    try { await stripe.paymentIntents.cancel(reservation.paymentIntentId); } catch (e: any) {
+                        console.log("Couldn't cancel the old paymentIntent during reservation cancelling", e.message || "payment error")
+                    }
                 }
             }
+
+            // 2. معالجة المديونية (لو الكارت فشل أو لو كان الدفع كاش من البداية)
+            if (!penaltyPaid) {
+                // هيدخل هنا لو الفيزا فشلت، أو لو مفيش فيزا أصلاً (كاش)
+
+                const checkoutSession = await stripe.checkout.sessions.create({
+                    line_items: [{
+                        quantity: 1,
+                        price_data: {
+                            currency: "egp",
+                            product_data: { name: `No-Show Penalty Fee (Reservation ${reservation.id})` },
+                            unit_amount: NO_SHOW_PENALTY_AMOUNT * 100,
+                        },
+                    }],
+                    mode: 'payment',
+                    success_url: 'https://your-site.com/thanks',
+                    cancel_url: 'https://your-site.com/try-again',
+                    metadata: {
+                        'reservation_id': reservation.id,
+                        'user_id': reservation.userId,
+                        'type': 'NO_SHOW_PENALTY'
+                    }
+                });
+
+                paymentLink = checkoutSession.url;
+                currentTransactionStatus = TransactionStatus.UNPAID_EXIT;
+                currentStripeId = checkoutSession.id;
+
+                // وضعه في القائمة السوداء
+                await prisma.user.update({
+                    where: { id: reservation.userId },
+                    data: { hasOutstandingDebt: true }
+                });
+
+                await prisma.vehicle.update({
+                    where: { id: reservation.vehicleId },
+                    data: { hasOutstandingDebt: true }
+                });
+
+                console.log(`⬛️ User ${reservation.userId} blacklisted due to unpaid No-Show penalty (Cash or Failed Card).`);
+            }
+
+            Emitter.to(`user_${reservation.userId}`).emit(CANCELED_RESERVATION_EMITTER_MESSAGE, {
+                type: "RESERVATION_CANCELLED",
+                reservationId: reservation.id,
+                charge: penaltyPaid ? NO_SHOW_PENALTY_AMOUNT : 0,
+                debtAmount: !penaltyPaid ? NO_SHOW_PENALTY_AMOUNT : 0,
+                paymentLink: paymentLink,
+                isBlacklisted: !penaltyPaid,
+                message: penaltyPaid
+                    ? `Your reservation was canceled for no-show. A penalty of ${NO_SHOW_PENALTY_AMOUNT} EGP was charged.`
+                    : `Your reservation was canceled. Penalty charge failed. You are blacklisted until you pay the ${NO_SHOW_PENALTY_AMOUNT} EGP via the provided link.`
+            });
+
+            console.log(`sending back to user_${reservation.userId} the cancelled reservation alert`)
 
             await Alert.create({
                 alert_type: AlertType.NO_SHOW,
@@ -86,12 +152,22 @@ export const handleReservationNoShowCheck = async (job: Job) => {
                 }
             });
 
-            // ملاحظة: المكان (Slot) في الـ Prisma هيفضى تلقائياً لأن الـ Smart Search بتاعك
-            // بيعتمد على إن الحجز يكون مش CANCELLED عشان يعتبر المكان مشغول.
+            await prisma.paymentTransaction.create({
+                data: {
+                    userId: reservation.userId,
+                    amount: NO_SHOW_PENALTY_AMOUNT,
+                    transactionStatus: currentTransactionStatus,
+                    reservationId: reservation.id,
+                    stripeTransactionId: currentStripeId,
+
+                }
+            });
+            console.log(`💳 PaymentTransaction recorded with status: ${currentTransactionStatus}`);
+
+
             console.log(`Reservation ${reservation.id} cancelled due to No-Show. Slot ${reservation.slotId} is now free.`);
             return;
         } else {
-            // اليوزر جه وعمل Session، كدة كله تمام
             console.log(`ReservationNoShow Job ${job.id}: User showed up and has active session ${activeSession.id}. All good.`);
         }
 

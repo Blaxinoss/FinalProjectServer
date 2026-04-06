@@ -47,8 +47,8 @@ router.post('/stripe', async (req, res) => {
             });
 
             if (!paymentTransaction) {
-                 console.error(`CRITICAL: Webhook ${event.id} refers to non-existent transaction ${internalTxnId}.`);
-                 return res.status(404).send('Transaction not found.');
+                console.error(`CRITICAL: Webhook ${event.id} refers to non-existent transaction ${internalTxnId}.`);
+                return res.status(404).send('Transaction not found.');
             }
 
             // 5. تحديث المعاملة (لو كانت لسه مش COMPLETED)
@@ -62,14 +62,14 @@ router.post('/stripe', async (req, res) => {
                 });
 
                 // 6. ⬛️ شيل العربية من القائمة السوداء ⬛️
-                await prisma.vehicle.update({
-                    where: { id: paymentTransaction.parkingSession.vehicleId },
-                    data: { hasOutstandingDebt: false }
-                });
+                // await prisma.vehicle.update({
+                //     where: { id: paymentTransaction.parkingSession?.vehicleId },
+                //     data: { hasOutstandingDebt: false }
+                // });
 
-                console.log(`✅ Debt paid for transaction ${internalTxnId}. Vehicle ${paymentTransaction.parkingSession.vehicle.plate} removed from blacklist.`);
+                // console.log(`✅ Debt paid for transaction ${internalTxnId}. Vehicle ${paymentTransaction.parkingSession.vehicle.plate} removed from blacklist.`);
             } else {
-                 console.log(`Webhook received for already completed transaction ${internalTxnId}. Ignoring.`);
+                console.log(`Webhook received for already completed transaction ${internalTxnId}. Ignoring.`);
             }
         } else {
             console.log(`Received unhandled webhook event type: ${event.type}`);
@@ -79,8 +79,8 @@ router.post('/stripe', async (req, res) => {
         res.status(200).json({ received: true });
 
     } catch (error: any) {
-         console.error(`Error processing webhook event ${event.id}:`, error.message);
-         res.status(500).json({ error: 'Internal server error' });
+        console.error(`Error processing webhook event ${event.id}:`, error.message);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

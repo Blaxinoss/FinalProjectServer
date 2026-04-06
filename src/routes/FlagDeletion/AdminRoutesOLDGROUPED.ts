@@ -15,74 +15,75 @@ export const router = Router();
 //المسار: /api/admin/sessions/:sessionId/complete-cash-payment
 
 
-router.post('sessions/:sessionId/complete-cash-payment',async(req:Request,res:Response)=>{
-    
-    const {sessionId} = req.params;
-    
-     if(!sessionId){
-        return res.status(400).json({error:'no session Id number were given'})
-    }
-    const sessionIdInt = parseInt(sessionId, 10);
+router.post('sessions/:sessionId/complete-cash-payment', async (req: Request, res: Response) => {
 
-   if (isNaN(sessionIdInt)) {
-        return res.status(400).json({ error: 'Invalid session ID format.' });
-    }
+  const { sessionId } = req.params;
 
-    try {
-         const parkingSession = await prisma.parkingSession.findUnique({where:{
-        id:sessionIdInt,
-    },
-    include: {
-                paymentTransaction: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 1
-                },
-                vehicle: { 
-                    select: { plate: true }
-                }
-            }
-})
+  if (!sessionId) {
+    return res.status(400).json({ error: 'no session Id number were given' })
+  }
+  const sessionIdInt = parseInt(sessionId, 10);
+
+  if (isNaN(sessionIdInt)) {
+    return res.status(400).json({ error: 'Invalid session ID format.' });
+  }
+
+  try {
+    const parkingSession = await prisma.parkingSession.findUnique({
+      where: {
+        id: sessionIdInt,
+      },
+      include: {
+        paymentTransaction: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        vehicle: {
+          select: { plate: true }
+        }
+      }
+    })
 
     if (!parkingSession) {
-            return res.status(404).json({ error: 'Parking session not found.' });
-        }
+      return res.status(404).json({ error: 'Parking session not found.' });
+    }
 
     const transaction = parkingSession.paymentTransaction[0];
-    
-  if (!transaction || transaction.transactionStatus !== TransactionStatus.PENDING) {
-            return res.status(400).json({ error: 'No pending transaction found for this session.' });
-        }
 
-        if (transaction.paymentMethod !== paymentMethod.CASH) {
-            return res.status(400).json({ error: 'This transaction is not marked for cash payment.' });
-        }
+    if (!transaction || transaction.transactionStatus !== TransactionStatus.PENDING) {
+      return res.status(400).json({ error: 'No pending transaction found for this session.' });
+    }
+
+    if (transaction.paymentMethod !== paymentMethod.CASH) {
+      return res.status(400).json({ error: 'This transaction is not marked for cash payment.' });
+    }
 
     await prisma.paymentTransaction.update({
-        where:{id:transaction.id},
-        data:{
-            paidAt: new Date(),
-            transactionStatus:"COMPLETED",
-        }
+      where: { id: transaction.id },
+      data: {
+        paidAt: new Date(),
+        transactionStatus: "COMPLETED",
+      }
     })
 
     console.log(`CASH payment completed for session ${parkingSession.id} by admin.`);
 
-          const topic = `garage/gate/event/response`;
-        const payload = JSON.stringify({
-            plateNumber: parkingSession.vehicle.plate,
-            decision: 'ALLOW_EXIT',
-            reason: 'MANUAL_CASH_PAYMENT'
-        });
-        mqttClient.publish(topic, payload);
-        console.log(`MQTT command sent to open exit gate for ${parkingSession.vehicle.plate}`);
+    const topic = `garage/gate/event/response`;
+    const payload = JSON.stringify({
+      plateNumber: parkingSession.vehicle.plate,
+      decision: 'ALLOW_EXIT',
+      reason: 'MANUAL_CASH_PAYMENT'
+    });
+    mqttClient.publish(topic, payload);
+    console.log(`MQTT command sent to open exit gate for ${parkingSession.vehicle.plate}`);
 
 
-        res.status(200).json({ message: 'Cash payment confirmed. Gate opening command sent.' });
+    res.status(200).json({ message: 'Cash payment confirmed. Gate opening command sent.' });
 
-    } catch (error: any) {
-        console.error("Error completing cash payment:", error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+  } catch (error: any) {
+    console.error("Error completing cash payment:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 
@@ -91,54 +92,54 @@ router.post('sessions/:sessionId/complete-cash-payment',async(req:Request,res:Re
 
 
 
-router.post('vehicles/:plateNumber/clear-debt',async(req:Request,res:Response)=>{
+router.post('vehicles/:plateNumber/clear-debt', async (req: Request, res: Response) => {
 
-    const {plateNumber} = req.params;
-    try {
-        if(!plateNumber){
-        return res.status(404).json({ error: 'plate number is missing.' });
+  const { plateNumber } = req.params;
+  try {
+    if (!plateNumber) {
+      return res.status(404).json({ error: 'plate number is missing.' });
 
-        }
-        const vehicleOwner = await prisma.vehicle.findUnique({
-            where:{plate:plateNumber},
-            select:{
-                hasOutstandingDebt:true,
-                user:{
-                    select:{
-                        id:true,
-                        hasOutstandingDebt:true,
-                    }
-                }
-            }
-        })
-
-        if(!vehicleOwner){
-                    return res.status(404).json({ error: 'Vehicle data is not found.' });
-        }
-
-        if (!vehicleOwner.hasOutstandingDebt && !vehicleOwner.user.hasOutstandingDebt) {
-             return res.status(200).json({ message: 'This user/vehicle already has no outstanding debt.' });
-        }
-        
-        await prisma.$transaction([
-         prisma.vehicle.update({
-            where:{plate:plateNumber},
-            data:{hasOutstandingDebt:false}
-        }),
-
-         prisma.user.update({
-            where:{id:vehicleOwner.user.id},
-            data:{hasOutstandingDebt:false}
-        })
-        ])
-        console.log(`Debt cleared for vehicle ${plateNumber} and user ${vehicleOwner.user.id}`);
-
-        return res.status(200).json({ message: 'Debt cleared successfully for vehicle and user.' });
-
-    } catch (error) {
-      console.error("Error completing cash payment:", error);
-        res.status(500).json({ error: 'Internal server error' });
     }
+    const vehicleOwner = await prisma.vehicle.findUnique({
+      where: { plate: plateNumber },
+      select: {
+        hasOutstandingDebt: true,
+        user: {
+          select: {
+            id: true,
+            hasOutstandingDebt: true,
+          }
+        }
+      }
+    })
+
+    if (!vehicleOwner) {
+      return res.status(404).json({ error: 'Vehicle data is not found.' });
+    }
+
+    if (!vehicleOwner.hasOutstandingDebt && !vehicleOwner.user.hasOutstandingDebt) {
+      return res.status(200).json({ message: 'This user/vehicle already has no outstanding debt.' });
+    }
+
+    await prisma.$transaction([
+      prisma.vehicle.update({
+        where: { plate: plateNumber },
+        data: { hasOutstandingDebt: false }
+      }),
+
+      prisma.user.update({
+        where: { id: vehicleOwner.user.id },
+        data: { hasOutstandingDebt: false }
+      })
+    ])
+    console.log(`Debt cleared for vehicle ${plateNumber} and user ${vehicleOwner.user.id}`);
+
+    return res.status(200).json({ message: 'Debt cleared successfully for vehicle and user.' });
+
+  } catch (error) {
+    console.error("Error completing cash payment:", error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 })
 
 
@@ -146,69 +147,69 @@ router.post('vehicles/:plateNumber/clear-debt',async(req:Request,res:Response)=>
 // PUT /api/admin/slots/:slotId/status
 
 router.put('slots/:slotId/status-force', async (req, res) => {
-    const { slotId } = req.params;
-    const { newStatus } = req.body;
+  const { slotId } = req.params;
+  const { newStatus } = req.body;
 
-    if (!newStatus || !Object.values(SlotStatus).includes(newStatus as SlotStatus)) {
-        return res.status(400).json({ 
-            error: `Invalid status. Must be one of: ${Object.values(SlotStatus).join(', ')}` 
-        });
+  if (!newStatus || !Object.values(SlotStatus).includes(newStatus as SlotStatus)) {
+    return res.status(400).json({
+      error: `Invalid status. Must be one of: ${Object.values(SlotStatus).join(', ')}`
+    });
+  }
+
+  try {
+    const currentSlot = await ParkingSlot.findById(slotId).lean();
+    if (!currentSlot) {
+      return res.status(404).json({ error: 'Parking slot not found in MongoDB.' });
     }
 
-    try {
-        const currentSlot = await ParkingSlot.findById(slotId).lean();
-        if (!currentSlot) {
-            return res.status(404).json({ error: 'Parking slot not found in MongoDB.' });
-        }
-
-        if (
-            [SlotStatus.OCCUPIED, SlotStatus.ASSIGNED, SlotStatus.CONFLICT].includes(currentSlot.status) &&
-            [SlotStatus.AVAILABLE, SlotStatus.MAINTENANCE, SlotStatus.DISABLED].includes(newStatus)
-        ) {
-            console.warn(`Admin is forcing slot ${slotId} from ${currentSlot.status} to ${newStatus}. Finding and cancelling active session...`);
-        }
-
-        const activeSession = await prisma.parkingSession.findFirst({
-                where: {
-                    slotId: slotId,
-                    status: ParkingSessionStatus.ACTIVE
-                },
-                select: { id: true, occupancyCheckJobId: true, exitCheckJobId: true }
-            });
-
-            if (activeSession) {
-                console.log(`Found active session ${activeSession.id}. Cancelling it and its jobs.`);
-                
-                await prisma.parkingSession.update({
-                    where: { id: activeSession.id },
-                    data: {
-                        status: ParkingSessionStatus.CANCELLED, 
-                        notes: `Admin forced slot status to ${newStatus}.` 
-                    }
-                });
-
-                const jobsToCancel = [activeSession.exitCheckJobId, activeSession.occupancyCheckJobId].filter(Boolean);
-                for (const jobId of jobsToCancel) {
-                    const job = await sessionLifecycleQueue.getJob(jobId!);
-                    if (job) await job.remove();
-                }
-            }
-            let updateQuery: any = { $set: { status: newStatus } };
-        
-        if ([SlotStatus.AVAILABLE, SlotStatus.MAINTENANCE, SlotStatus.DISABLED].includes(newStatus)) {
-            updateQuery.$set.current_vehicle = null;
-            updateQuery.$set.conflict_details = null;
-            updateQuery.$set.violating_vehicle = null;
-        }
-
-        await ParkingSlot.updateOne({ _id: slotId }, updateQuery);
-
-        res.status(200).json({ message: `Slot ${slotId} status successfully updated to ${newStatus}.` });
-
-    } catch (error: any) {
-        console.error(`Error updating slot status for ${slotId}:`, error);
-        res.status(500).json({ error: 'Internal server error' });
+    if (
+      [SlotStatus.OCCUPIED, SlotStatus.ASSIGNED, SlotStatus.CONFLICT].includes(currentSlot.status) &&
+      [SlotStatus.AVAILABLE, SlotStatus.MAINTENANCE, SlotStatus.DISABLED].includes(newStatus)
+    ) {
+      console.warn(`Admin is forcing slot ${slotId} from ${currentSlot.status} to ${newStatus}. Finding and cancelling active session...`);
     }
+
+    const activeSession = await prisma.parkingSession.findFirst({
+      where: {
+        slotId: slotId,
+        status: ParkingSessionStatus.ACTIVE
+      },
+      select: { id: true, occupancyCheckJobId: true, exitCheckJobId: true }
+    });
+
+    if (activeSession) {
+      console.log(`Found active session ${activeSession.id}. Cancelling it and its jobs.`);
+
+      await prisma.parkingSession.update({
+        where: { id: activeSession.id },
+        data: {
+          status: ParkingSessionStatus.CANCELLED,
+          notes: `Admin forced slot status to ${newStatus}.`
+        }
+      });
+
+      const jobsToCancel = [activeSession.exitCheckJobId, activeSession.occupancyCheckJobId].filter(Boolean);
+      for (const jobId of jobsToCancel) {
+        const job = await sessionLifecycleQueue.getJob(jobId!);
+        if (job) await job.remove();
+      }
+    }
+    let updateQuery: any = { $set: { status: newStatus } };
+
+    if ([SlotStatus.AVAILABLE, SlotStatus.MAINTENANCE, SlotStatus.DISABLED].includes(newStatus)) {
+      updateQuery.$set.current_vehicle = null;
+      updateQuery.$set.conflict_details = null;
+      updateQuery.$set.violating_vehicle = null;
+    }
+
+    await ParkingSlot.updateOne({ _id: slotId }, updateQuery);
+
+    res.status(200).json({ message: `Slot ${slotId} status successfully updated to ${newStatus}.` });
+
+  } catch (error: any) {
+    console.error(`Error updating slot status for ${slotId}:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 
@@ -217,91 +218,92 @@ router.put('slots/:slotId/status-force', async (req, res) => {
 // cancelation here means that there will be no payment at all
 // POST /api/admin/sessions/:sessionId/force-cancel
 router.post('sessions/:sessionId/force-cancel', async (req, res) => {
-    const { sessionId } = req.params;
-    const sessionIdInt = parseInt(sessionId, 10);
-    // const adminNotes = req.body.notes || "Forced cancellation by admin";
-    // const adminId = req.user.id; // (من الميدل وير)
+  const { sessionId } = req.params;
+  const sessionIdInt = parseInt(sessionId, 10);
+  // const adminNotes = req.body.notes || "Forced cancellation by admin";
+  // const adminId = req.user.id; // (من الميدل وير)
 
-    if (isNaN(sessionIdInt)) {
-        return res.status(400).json({ error: 'Invalid session ID format.' });
+  if (isNaN(sessionIdInt)) {
+    return res.status(400).json({ error: 'Invalid session ID format.' });
+  }
+
+  try {
+    // --- 1. جلب الجلسة والتحقق منها ---
+    const session = await prisma.parkingSession.findUnique({
+      where: { id: sessionIdInt }
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Parking session not found.' });
     }
 
+    // (ممكن نسمح بإلغاء أي حالة، بس الأغلب إننا بنلغي ACTIVE)
+    if (session.status !== ParkingSessionStatus.ACTIVE) {
+      return res.status(400).json({ error: `Session is already ${session.status}. No action needed.` });
+    }
+
+    // --- 2. إلغاء الجوبات المؤجلة (التنضيف) ---
+    console.log(`Admin cancelling jobs for session ${session.id}...`);
     try {
-        // --- 1. جلب الجلسة والتحقق منها ---
-        const session = await prisma.parkingSession.findUnique({
-            where: { id: sessionIdInt }
-        });
+      const jobsToCancel = [session.exitCheckJobId, session.occupancyCheckJobId].filter(Boolean); // فلتر الـ null
+      for (const jobId of jobsToCancel) {
+        const job = await sessionLifecycleQueue.getJob(jobId!);
+        if (job) await job.remove();
+      }
+      console.log(`Jobs for session ${session.id} removed.`);
+    } catch (jobError: any) {
+      console.error(`Error removing jobs for session ${session.id}, but proceeding anyway:`, jobError.message);
+      // (هنكمل حتى لو الجوب منعرفش نلغيها، قفل السيشن أهم)
+    }
 
-        if (!session) {
-            return res.status(404).json({ error: 'Parking session not found.' });
+    await prisma.$transaction([
+      // --- 2. إلغاء الجلسة (Prisma) ---
+      prisma.parkingSession.update({
+        where: { id: session.id },
+        data: {
+          status: ParkingSessionStatus.CANCELLED,
+          exitTime: new Date(),
         }
-        
-        // (ممكن نسمح بإلغاء أي حالة، بس الأغلب إننا بنلغي ACTIVE)
-        if (session.status !== ParkingSessionStatus.ACTIVE) {
-             return res.status(400).json({ error: `Session is already ${session.status}. No action needed.` });
-        }
-        
-        // --- 2. إلغاء الجوبات المؤجلة (التنضيف) ---
-        console.log(`Admin cancelling jobs for session ${session.id}...`);
-        try {
-            const jobsToCancel = [session.exitCheckJobId, session.occupancyCheckJobId].filter(Boolean); // فلتر الـ null
-            for (const jobId of jobsToCancel) {
-                const job = await sessionLifecycleQueue.getJob(jobId!);
-                if (job) await job.remove();
-            }
-            console.log(`Jobs for session ${session.id} removed.`);
-        } catch (jobError: any) {
-            console.error(`Error removing jobs for session ${session.id}, but proceeding anyway:`, jobError.message);
-            // (هنكمل حتى لو الجوب منعرفش نلغيها، قفل السيشن أهم)
-        }
+      }),
 
-        await prisma.$transaction([
-        // --- 2. إلغاء الجلسة (Prisma) ---
-        prisma.parkingSession.update({
-            where: { id: session.id },
-            data: {
-                status: ParkingSessionStatus.CANCELLED,
-                exitTime: new Date(),
-            }
-        }),
-
-        // --- ⬇️ 3. الإضافة الجديدة: إنشاء فاتورة ملغية ⬇️ ---
-        prisma.paymentTransaction.create({
-            data: {
-                parkingSessionId: session.id,
-                amount: 0, // ⬅️ مفيش فلوس
-                paymentMethod: session.paymentType, // (بنحفظ الطريقة اللي كانت مختارة)
-                transactionStatus: TransactionStatus.CANCELLED, // ⬅️ الحالة الجديدة
-                paidAt: new Date() // (بنعتبر إنها "اتقفلت" دلوقتي)
-            }
-        })
-        // --- ⬆️ نهاية الإضافة ⬆️ ---
+      // --- ⬇️ 3. الإضافة الجديدة: إنشاء فاتورة ملغية ⬇️ ---
+      prisma.paymentTransaction.create({
+        data: {
+          userId: session.userId,
+          parkingSessionId: session.id,
+          amount: 0, // ⬅️ مفيش فلوس
+          paymentMethod: session.paymentType, // (بنحفظ الطريقة اللي كانت مختارة)
+          transactionStatus: TransactionStatus.CANCELLED, // ⬅️ الحالة الجديدة
+          paidAt: new Date() // (بنعتبر إنها "اتقفلت" دلوقتي)
+        }
+      })
+      // --- ⬆️ نهاية الإضافة ⬆️ ---
     ]);
 
-        console.log(`Session ${session.id} marked as CANCELLED And a zero cancelled payment has been created.`);
+    console.log(`Session ${session.id} marked as CANCELLED And a zero cancelled payment has been created.`);
 
-        // --- 4. تحرير المكان (MongoDB) ---
-        // (لازم نتأكد إننا بنفضي المكان الصح، وإن المكان ده مكنش أصلًا فاضي)
-        if (session.slotId) {
-            await ParkingSlot.updateOne(
-                { _id: session.slotId, 'current_vehicle.plate_number': (await prisma.vehicle.findUnique({where: {id: session.vehicleId}}))?.plate }, // ⬅️ فلتر أمان إضافي
-                {
-                    $set: {
-                        status: SlotStatus.AVAILABLE,
-                        current_vehicle: null,
-                        conflict_details: null,
-                        violating_vehicle: null
-                    }
-                }
-            );
-            console.log(`Slot ${session.slotId} reset to AVAILABLE.`);
+    // --- 4. تحرير المكان (MongoDB) ---
+    // (لازم نتأكد إننا بنفضي المكان الصح، وإن المكان ده مكنش أصلًا فاضي)
+    if (session.slotId) {
+      await ParkingSlot.updateOne(
+        { _id: session.slotId, 'current_vehicle.plate_number': (await prisma.vehicle.findUnique({ where: { id: session.vehicleId } }))?.plate }, // ⬅️ فلتر أمان إضافي
+        {
+          $set: {
+            status: SlotStatus.AVAILABLE,
+            current_vehicle: null,
+            conflict_details: null,
+            violating_vehicle: null
+          }
         }
-
-res.status(200).json({ message: `Session ${session.id} has been forcibly cancelled.` });
-    } catch (error: any) {
-        console.error(`Error during force-cancel for session ${sessionId}:`, error);
-        res.status(500).json({ error: 'Internal server error' });
+      );
+      console.log(`Slot ${session.slotId} reset to AVAILABLE.`);
     }
+
+    res.status(200).json({ message: `Session ${session.id} has been forcibly cancelled.` });
+  } catch (error: any) {
+    console.error(`Error during force-cancel for session ${sessionId}:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 
@@ -310,37 +312,37 @@ res.status(200).json({ message: `Session ${session.id} has been forcibly cancell
 // POST /api/admin/gates/:gateId/force-command
 // (نفترض إن الميدل وير بتاع الأدمن شغال عليه)
 router.post('/force-command', async (req: Request, res: Response) => {
-    const { command } = req.body; // (اختياري: سبب الفتح اليدوي)
-    // const adminId = req.user.id; // (من الميدل وير)
+  const { command } = req.body; // (اختياري: سبب الفتح اليدوي)
+  // const adminId = req.user.id; // (من الميدل وير)
 
-    if (!command) {
-        return res.status(400).json({ error: 'Command required.' });
-    }
+  if (!command) {
+    return res.status(400).json({ error: 'Command required.' });
+  }
 
-    
-    try {
-        // 1. تحديد التوبيك بتاع الأوامر (ده مثال، لازم تتفق عليه مع هاردوير البوابة)
-        // ممكن يكون توبيك واحد والبوابة بتفلتر بالـ requestId أو gateId
-        // أو توبيك مخصص لكل بوابة
-        const commandTopic = `garage/gate/admin/command/${command}`;
-        const payload = JSON.stringify({
-          command:  command.toUpperCase(),
-            reason: `ADMIN_OVERRIDE`,
-            adminId: 1,
-            timestamp: new Date().toISOString()
-        });
 
-        // 2. إرسال الأمر
-        mqttClient.publish(commandTopic, payload, { qos: 1 }); // (qos 1 لضمان وصوله)
+  try {
+    // 1. تحديد التوبيك بتاع الأوامر (ده مثال، لازم تتفق عليه مع هاردوير البوابة)
+    // ممكن يكون توبيك واحد والبوابة بتفلتر بالـ requestId أو gateId
+    // أو توبيك مخصص لكل بوابة
+    const commandTopic = `garage/gate/admin/command/${command}`;
+    const payload = JSON.stringify({
+      command: command.toUpperCase(),
+      reason: `ADMIN_OVERRIDE`,
+      adminId: 1,
+      timestamp: new Date().toISOString()
+    });
 
-        console.log(`ADMIN: Force ${command} command sent to gate.`);
+    // 2. إرسال الأمر
+    mqttClient.publish(commandTopic, payload, { qos: 1 }); // (qos 1 لضمان وصوله)
 
-        res.status(200).json({ message: `Force ${command} command sent to gate.` });
+    console.log(`ADMIN: Force ${command} command sent to gate.`);
 
-    } catch (error: any) {
-        console.error(`Error sending force-open command:`, error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+    res.status(200).json({ message: `Force ${command} command sent to gate.` });
+
+  } catch (error: any) {
+    console.error(`Error sending force-open command:`, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 
@@ -385,20 +387,20 @@ router.get("/slots", async (req: Request, res: Response): Promise<void> => {
 
 
 
-    /* ---------------- GET ALL VEHICLES ADMIN ---------------- */
-  router.get("/vehicles", async (req: Request, res: Response): Promise<void> => {
-    try {
-      const vehicles: Vehicle[] = await prisma.vehicle.findMany({
-              include: { user: true, ParkingSessions: true },
-      });
-      res.status(200).json({ success: true, data: vehicles });
-    } catch (error: any) {
-      res.status(500).json({
-        code: error.code || null,
-        message: `Error while fetching the Vehicles: ${error.message || "Unknown error"}`,
-      });
-    }
-  });
+/* ---------------- GET ALL VEHICLES ADMIN ---------------- */
+router.get("/vehicles", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const vehicles: Vehicle[] = await prisma.vehicle.findMany({
+      include: { user: true, ParkingSessions: true },
+    });
+    res.status(200).json({ success: true, data: vehicles });
+  } catch (error: any) {
+    res.status(500).json({
+      code: error.code || null,
+      message: `Error while fetching the Vehicles: ${error.message || "Unknown error"}`,
+    });
+  }
+});
 
 /* ---------------- GET VEHICLE BY ID ADMIN---------------- */
 router.get("/vehicle/:id", async (req: Request, res: Response): Promise<void> => {
@@ -441,7 +443,7 @@ router.get("/users", async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while fetcching the user: ${error.message || "Unknown error"}`
+      message: `Error while fetcching the user: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -449,12 +451,12 @@ message: `Error while fetcching the user: ${error.message || "Unknown error"}`
 
 router.get("/vehicles/:userId", async (req: Request, res: Response) => {
   try {
-      if (!req.params.userId) {
+    if (!req.params.userId) {
       res.status(400).json({ message: "User Id is not provided" });
       return;
     }
     const userId = parseInt(req.params.userId, 10);
-    
+
     if (isNaN(userId)) {
       return res.status(400).json({ success: false, message: "Invalid user ID" });
     }
@@ -464,11 +466,11 @@ router.get("/vehicles/:userId", async (req: Request, res: Response) => {
       include: { ParkingSessions: true },
     });
 
-    res.status(200).json({vehicles});
+    res.status(200).json({ vehicles });
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while fetcching the user cars: ${error.message || "Unknown error"}`
+      message: `Error while fetcching the user cars: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -491,7 +493,7 @@ router.delete("/user/:id", async (req: Request, res: Response): Promise<void> =>
     }
 
     const deletedUser = await prisma.user.delete({
-      where: { id},
+      where: { id },
     });
 
     res.status(200).json({
@@ -501,7 +503,7 @@ router.delete("/user/:id", async (req: Request, res: Response): Promise<void> =>
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while deleting the user: ${error.message || "Unknown error"}`
+      message: `Error while deleting the user: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -535,7 +537,7 @@ router.put("/user/:id", async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     res.status(500).json({
       code: error.code || null,
-message: `Error while updating the user: ${error.message || "Unknown error"}`
+      message: `Error while updating the user: ${error.message || "Unknown error"}`
     });
   }
 });
@@ -543,7 +545,7 @@ message: `Error while updating the user: ${error.message || "Unknown error"}`
 
 // --- 2. Get Admin All Reservations ---
 router.get("/reservations", async (req: Request, res: Response) => {
- 
+
 
   try {
     const userReservations = await prisma.reservation.findMany({
@@ -574,64 +576,64 @@ router.get("/reservations", async (req: Request, res: Response) => {
 // this route is only used internally by admin to change slotId in emergency cases
 // FOR ADMIN ONLY!!!!!!!!!!!!
 router.put("/reservations/:id", async (req: Request, res: Response) => {
-    // (الميدل وير بتاع الأدمن شغال)
-    
+  // (الميدل وير بتاع الأدمن شغال)
 
-    if (!req.params.id) {
-        return res.status(400).json({ error: "No reservation id provided." });
+
+  if (!req.params.id) {
+    return res.status(400).json({ error: "No reservation id provided." });
+  }
+
+
+  const reservationId = parseInt(req.params.id);
+  const { newStatus } = req.body; // { "newStatus": "CANCELLED" }
+
+  if (!newStatus) {
+    return res.status(400).json({ error: "No newStatus provided." });
+  }
+
+  try {
+    // --- 1. هات الحجز الأصلي (عشان نجيب بياناته) ---
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId }
+    });
+
+    if (!reservation) {
+      return res.status(404).json({ error: "Reservation not found." });
     }
 
 
-    const reservationId = parseInt(req.params.id);
-    const { newStatus } = req.body; // { "newStatus": "CANCELLED" }
+    // (أهم حالة: لو الأدمن بيلغي الحجز)
+    if (newStatus === ReservationsStatus.CANCELLED) {
 
-    if (!newStatus) {
-        return res.status(400).json({ error: "No newStatus provided." });
-    }
-
-    try {
-        // --- 1. هات الحجز الأصلي (عشان نجيب بياناته) ---
-        const reservation = await prisma.reservation.findUnique({
-            where: { id: reservationId }
-        });
-
-        if (!reservation) {
-            return res.status(404).json({ error: "Reservation not found." });
+      // 2أ. الغي الهولد بتاع الفلوس (لو موجود)
+      if (reservation.paymentIntentId) {
+        try {
+          await stripe.paymentIntents.cancel(reservation.paymentIntentId);
+          console.log(`Admin cancelled reservation ${reservationId}, PaymentIntent ${reservation.paymentIntentId} cancelled.`);
+        } catch (stripeError: any) {
+          console.error(`Error cancelling Stripe intent while admin cancelled reservation:`, stripeError.message);
+          // (ممكن نوقف هنا أو نكمل - الأفضل نكمل ونلغي الحجز)
         }
+      }
 
-
-        // (أهم حالة: لو الأدمن بيلغي الحجز)
-        if (newStatus === ReservationsStatus.CANCELLED) {
-            
-            // 2أ. الغي الهولد بتاع الفلوس (لو موجود)
-            if (reservation.paymentIntentId) {
-                try {
-                    await stripe.paymentIntents.cancel(reservation.paymentIntentId);
-                    console.log(`Admin cancelled reservation ${reservationId}, PaymentIntent ${reservation.paymentIntentId} cancelled.`);
-                } catch (stripeError: any) {
-                    console.error(`Error cancelling Stripe intent while admin cancelled reservation:`, stripeError.message);
-                    // (ممكن نوقف هنا أو نكمل - الأفضل نكمل ونلغي الحجز)
-                }
-            }
-            
-            // 2ب. (لو فيه جوبات مستقبلية مرتبطة بالحجز ده، نلغيها هنا)
-            // (في حالتنا الجوبات مرتبطة بالسيشن، فمفيش حاجة هنا)
-        }
-
-        // --- 3. تنفيذ التحديث في الداتابيز ---
-        const updatedReservation = await prisma.reservation.update({
-            where: { id: reservationId },
-            data: {
-                status: newStatus 
-            },
-        });
-
-        res.status(200).json(updatedReservation);
-
-    } catch (error: any) {
-        console.error("Error updating reservation status:", error);
-        res.status(500).json({ error: "Internal server error" });
+      // 2ب. (لو فيه جوبات مستقبلية مرتبطة بالحجز ده، نلغيها هنا)
+      // (في حالتنا الجوبات مرتبطة بالسيشن، فمفيش حاجة هنا)
     }
+
+    // --- 3. تنفيذ التحديث في الداتابيز ---
+    const updatedReservation = await prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        status: newStatus
+      },
+    });
+
+    res.status(200).json(updatedReservation);
+
+  } catch (error: any) {
+    console.error("Error updating reservation status:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 
@@ -640,7 +642,7 @@ router.put("/reservations/:id", async (req: Request, res: Response) => {
 router.get("/transactions", async (req: Request, res: Response): Promise<void> => {
   try {
     const transactions: any[] = await prisma.paymentTransaction.findMany({
-      include: { parkingSession: true }, 
+      include: { parkingSession: true },
     });
     res.status(200).json({ success: true, data: transactions });
   } catch (error: any) {
@@ -667,7 +669,7 @@ router.get("/transactions/:id", async (req: Request, res: Response): Promise<voi
 
     const transaction = await prisma.paymentTransaction.findUnique({
       where: { id },
-      include: { parkingSession: true }, 
+      include: { parkingSession: true },
     });
 
     if (!transaction) {
@@ -705,14 +707,15 @@ router.put("/transactions/:id", async (req: Request, res: Response): Promise<voi
       res.status(400).json({ success: false, message: "No data provided to update" });
       return;
     }
-    
+
 
     const updatedTransaction = await prisma.paymentTransaction.update({
-      where: { id,
-        parkingSession:{
-          userId:req.user?.id!
+      where: {
+        id,
+        parkingSession: {
+          userId: req.user?.id!
         }
-       },
+      },
       data,
     });
 
@@ -720,8 +723,8 @@ router.put("/transactions/:id", async (req: Request, res: Response): Promise<voi
   } catch (error: any) {
     // P2025 is often the error code for record not found in Prisma update operations
     if (error.code === 'P2025') {
-       res.status(404).json({ success: false, message: "Payment Transaction not found for update" });
-       return;
+      res.status(404).json({ success: false, message: "Payment Transaction not found for update" });
+      return;
     }
     res.status(500).json({
       code: error.code || null,
@@ -780,18 +783,18 @@ router.post("/transactions", async (req: Request, res: Response): Promise<void> 
 
     // Basic type/value validation
     if (typeof parkingSessionId !== 'number' || typeof amount !== 'number' || typeof paymentMethod !== 'string') {
-        res.status(400).json({ success: false, message: "Invalid data types for one or more fields" });
-        return;
+      res.status(400).json({ success: false, message: "Invalid data types for one or more fields" });
+      return;
     }
 
 
     const newTransaction = await prisma.paymentTransaction.create({
-      data: { 
-          parkingSessionId, 
-          amount, 
-          paymentMethod, 
-          // transactionStatus is optional in the request body as it has a default, but if provided, use it
-          ...(transactionStatus && { transactionStatus }) 
+      data: {
+        parkingSessionId,
+        amount,
+        paymentMethod,
+        // transactionStatus is optional in the request body as it has a default, but if provided, use it
+        ...(transactionStatus && { transactionStatus })
       },
     });
 
@@ -811,7 +814,7 @@ router.post("/transactions", async (req: Request, res: Response): Promise<void> 
 router.get("/sessions", async (req: Request, res: Response): Promise<void> => {
   try {
     const parkingSessions: any[] = await prisma.parkingSession.findMany({
-      include: { user:true,paymentTransaction:true,vehicle:true }, 
+      include: { user: true, paymentTransaction: true, vehicle: true },
     });
     res.status(200).json({ success: true, data: parkingSessions });
   } catch (error: any) {

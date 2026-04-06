@@ -17,3 +17,11 @@ export const CONFLICT_FEE = 20.0; // EGP fixed fee for causing conflict
 export const MINIMUM_CHARGE = 5.0; // EGP minimum charge for any session
 export const NO_SHOW_PENALTY_AMOUNT = 100.0;
 export const HOLDAMOUNT_WHILE_RESERVATIONS = 10000;
+
+
+
+
+export const CANCELED_RESERVATION_EMITTER_MESSAGE = "CANCELED_RESERVATION";
+export const SLOT_STATUS_CHANGED_MESSAGE = "SLOT_STATUS_CHANGED"
+export const VERIFYING_PLATE_GATE_ENTRY = "VERIFYING_PLATE_GATE_ENTRY";
+export const DECISION_GATE_ENTRY_EMIT = "DECISION_GATE_ENTRY_EMIT";

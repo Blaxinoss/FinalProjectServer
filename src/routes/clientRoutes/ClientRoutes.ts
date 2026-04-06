@@ -5,13 +5,15 @@ import vehicleRouter from "./VehicleRoute.js";
 import userRouter from './UserRoute.js'
 import reservationRouter from './ReservationRoute.js'
 import paymentTransactionsRouter from "./PaymentTransactionRoute.js";
+import slotsRouter from './SlotsRoute.js'
 
 const router = Router();
 
-router.use("/vehicles",vehicleRouter);
+router.use("/vehicles", vehicleRouter);
 router.use("/users", userRouter);
 router.use("/sessions", parkingSessionsRouter);
 router.use("/transactions", paymentTransactionsRouter);
 router.use("/reservations", reservationRouter);
+router.use("/slots", slotsRouter);
 
 export default router;

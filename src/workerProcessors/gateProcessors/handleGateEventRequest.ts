@@ -9,12 +9,14 @@ import { ParkingSessionStatus, paymentMethod, ReservationsStatus } from '../../g
 import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
 import { redisWorker } from '../../workers/consumer.js';
+import { getEmitter } from '../../db&init/redisWorkerEmitterWithClient.js';
+
 
 /**
  * 🚪 الدالة الرئيسية التي تتعامل مع طلبات الدخول من البوابة (بنمط القرار النهائي).
  */
 export const handleGateEntryRequest = async (job: Job) => {
-    const { plateNumber, requestId, timestamp, gate = "gate1" } = job.data;
+    const { plateNumber, requestId, gate = "gate1" } = job.data;
 
     // 1. تعريف متغيرات القرار النهائي
     let decision = 'DENY_ENTRY'; // القيمة الافتراضية هي الرفض
@@ -31,6 +33,8 @@ export const handleGateEntryRequest = async (job: Job) => {
             reason = 'MISSING_PLATE_NUMBER';
             throw new Error('Missing plateNumber in job data');
         }
+
+
 
         const vehicle = await prisma.vehicle.findUnique({
             where: { plate: plateNumber }
@@ -67,6 +71,7 @@ export const handleGateEntryRequest = async (job: Job) => {
         // =======================
         if (reservation) {
 
+            const reservationLateJob = await sessionLifecycleQueue.getJob(`no_show_check_${reservation.id}`)
 
 
             console.log(`🔍 Found reservation ${reservation.id} for plate ${plateNumber}.`);
@@ -74,7 +79,7 @@ export const handleGateEntryRequest = async (job: Job) => {
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
 
 
-            if (designatedSlotStatus?.status === SlotStatus.AVAILABLE) {
+            if (designatedSlotStatus?.status === SlotStatus.AVAILABLE || designatedSlotStatus?.status === SlotStatus.RESERVED) {
                 const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
                 await assignSlotAndStartSession(reservation, designatedSlot);
                 console.log(`✅ Reservation honored. Vehicle ${plateNumber} assigned to slot ${designatedSlot?.id}.`);
@@ -83,6 +88,8 @@ export const handleGateEntryRequest = async (job: Job) => {
                 reason = 'RESERVATION_HONORED';
                 message = `Vehicle assigned to reserved slot ${designatedSlot?.id} and session started.`;
                 slotName = designatedSlot?.id || "";
+                await reservationLateJob?.remove();
+
 
             } else if (reservation.isStacked && designatedSlotStatus?.status === SlotStatus.OCCUPIED) {
                 console.log(`⚠️ Stacked reservation's slot is OCCUPIED. Searching for a safe alternative...`);
@@ -97,6 +104,8 @@ export const handleGateEntryRequest = async (job: Job) => {
                     reason = 'STACKED_RESERVATION_RELOCATED';
                     message = `Vehicle assigned to alternative slot ${alternativeSlot.id} and session started.`;
                     slotName = alternativeSlot.id;
+                    await reservationLateJob?.remove();
+
                 } else {
                     reason = 'NO_SAFE_ALTERNATIVE_SLOT';
                     message = 'Garage is full; no safe alternative slots available.';
@@ -218,8 +227,16 @@ export const handleGateEntryRequest = async (job: Job) => {
             timestamp: new Date().toISOString(),
         });
 
+
+
         console.log(`📢 Publishing final decision to topic ${responseTopic}:`, responsePayload);
         mqttClient.publish(responseTopic, responsePayload);
+        getEmitter().to(`user_${plateNumber}`).emit("DECISION_GATE_ENTRY_EMIT", {
+            status: "DECISION_MADE",
+            decision,
+            message,
+            slotName
+        })
 
         // 3. إرجاع نتيجة المهمة للـ Queue نفسها
         return jobStatus;

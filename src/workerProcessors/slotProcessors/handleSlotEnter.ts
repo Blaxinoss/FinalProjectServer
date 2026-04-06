@@ -1,10 +1,10 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
-import {prisma} from '../../routes/prsimaForRouters.js';
-import { ParkingSessionStatus} from "../../generated/prisma/client.js"; // Import SlotType
+import { prisma } from '../../routes/prsimaForRouters.js';
+import { ParkingSessionStatus } from "../../generated/prisma/client.js"; // Import SlotType
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Corrected import
 import { Alert } from "../../mongo_Models/alert.js";
- import {  sendFCMNotification} from "../../services/notifications.js";
+import { sendFCMNotification } from "../../services/notifications.js";
 
 import { findSafeAlternativeSlot } from "../Helpers/helpers.js";
 import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../../constants/constants.js";
@@ -147,7 +147,7 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
 
                         }
                     } else {
-                            console.log(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
+                        console.log(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
                         throw new Error(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
                     }
 
@@ -156,7 +156,7 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                     const affectedUserSession = await prisma.parkingSession.findFirst({
                         where: { slotId: slot_id, status: ParkingSessionStatus.ACTIVE },
                         include: {
-                            user:true,
+                            user: true,
                             vehicle: { select: { plate: true } }
                         },
                     });
@@ -264,17 +264,18 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                             // await prisma.parkingSession.update({ where: { id: affectedUserSession.id }, data: { status: ParkingSessionStatus.CONFLICT } });
                         }
                     }
-   if (affectedUserSession.user.notificationToken) {
- await sendFCMNotification(
-                        affectedUserSession.user.notificationToken,
-                        notificationTitle,
-                        notificationBody,
-                        
-                    );        } else {
-            console.warn(`No notification token found for user in session ${affectedUserSession.user.name}`);
-        }
+                    if (affectedUserSession.user.notificationToken) {
+                        await sendFCMNotification(
+                            affectedUserSession.user.notificationToken,
+                            notificationTitle,
+                            notificationBody,
 
-                   
+                        );
+                    } else {
+                        console.warn(`No notification token found for user in session ${affectedUserSession.user.name}`);
+                    }
+
+
 
 
 
