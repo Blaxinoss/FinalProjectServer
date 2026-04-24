@@ -11,9 +11,11 @@ export const handlePayment = async (job: Job) => {
 
     const { sessionId, amount, userId, plateNumber } = job.data
 
-    if (!sessionId || !amount || !userId || !plateNumber) {
+
+
+    if (!sessionId || typeof amount !== 'number' || !userId || !plateNumber) {
         console.log(`data missing while running job ${job.id}`)
-        throw (`data is missing for the payment worker on job ${job.id}`)
+        throw new Error(`data is missing for the payment worker on job ${job.id}`)
     }
 
 

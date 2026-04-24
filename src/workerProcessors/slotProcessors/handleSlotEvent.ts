@@ -6,10 +6,10 @@ import { handleSlotExit } from '../slotProcessors/handleSlotExit.js';
 export const handleSlotEvent = async (job: Job) => {
     // Extract all relevant data from the job
     const { slot_id, plate_number, event_type, timestamp } = job.data;
-
+    console.log(plate_number)
     // Basic validation
-    if (!slot_id || !event_type) {
-        throw new Error('❌ Slot Event Job ${job.id}: Missing slot_id or event_type.')
+    if (!slot_id || !event_type || !plate_number) {
+        throw new Error('❌ Slot Event Job ${job.id}: Missing slot_id or event_type or plate_number.')
     }
 
     try {
@@ -18,7 +18,7 @@ export const handleSlotEvent = async (job: Job) => {
             case "enter": // Keep both if needed
                 console.log(`Job ${job.id}: Handling slot enter event for ${slot_id}`);
                 // Pass the necessary data to the handler
-                return await handleSlotEnter(slot_id, plate_number, timestamp);
+                return await handleSlotEnter({ slot_id, plate_number, timestamp });
 
             case "AVAILABLE": // Assuming AVAILABLE maps to exit
             case "exit": // Keep both if needed

@@ -34,14 +34,26 @@ router.get("/active", async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.user?.id!;
 
+
+
     const activeSession = await prisma.parkingSession.findFirst({
       where: {
         userId: id,
-        status: ParkingSessionStatus.ACTIVE
+        OR: [
+          { status: ParkingSessionStatus.ACTIVE },
+          {
+            status: ParkingSessionStatus.EXITING,
+          }
+        ]
       },
       include: {
         vehicle: true,
-      }
+        paymentTransaction: {
+          orderBy: { createdAt: 'desc' }
+        },
+
+      },
+
     });
 
     res.status(200).json({ success: true, data: activeSession }); // هيرجع null لو مش راكن

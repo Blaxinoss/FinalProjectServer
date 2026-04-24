@@ -18,6 +18,7 @@ import { connectRedis } from "../db&init/redis.js";
 import { handleGateExitRequest } from "../workerProcessors/gateProcessors/handleGateExitRequest.js";
 import { handleReservationNoShowCheck } from "../workerProcessors/reservationProcess/handleReservationWaitedSoLong.js";
 import { createEmitters } from "../db&init/redisWorkerEmitterWithClient.js";
+import { handleOccupancyCheck } from "../workerProcessors/sessionProcessors/handleOccupancyCheck.js";
 // import { handlePayment } from "./workerProcessors/paymentProcessor.js"; // Assuming you have this
 
 export const redisWorker = await connectRedis();
@@ -76,6 +77,7 @@ const slotEventWorker = new Worker('slot-event-queue', async (job: Job) => {
     concurrency: 5,
 });
 
+
 const sessionLifecycleWorker = new Worker('session-lifecycle-queue', async (job: Job) => {
     if (job.name === 'check-session-expiry') {
         return handleSessionExpiry(job); // From sessionProcessor.js
@@ -83,6 +85,9 @@ const sessionLifecycleWorker = new Worker('session-lifecycle-queue', async (job:
         return handleGracePeriodExpiry(job); // From sessionProcessor.js
     } else if (job.name === 'check-reservation-not-moving') {
         return handleReservationNoShowCheck(job);
+    }
+    if (job.name === 'check-actual-occupancy') {
+        return handleOccupancyCheck(job);
     }
     // Handle other job names if any
 }, {

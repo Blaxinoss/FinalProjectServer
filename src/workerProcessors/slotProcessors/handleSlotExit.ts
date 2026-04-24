@@ -1,15 +1,23 @@
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
 import { prisma } from "../../routes/prsimaForRouters.js";
-import { ParkingSessionStatus } from "../../generated/prisma/client.js";
+import { ParkingSessionStatus, Prisma, type ParkingSession } from "../../generated/prisma/client.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js";
 import { sessionLifecycleQueue } from "../../queues/queues.js"; // Import queue
 import { paymentQueue } from "../../queues/queues.js"; // Import payment queue
 import { Alert } from "../../mongo_Models/alert.js";
 import { calculateBill } from "../Helpers/Bills.js";
+import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
+import { HANDLE_SLOT_EXIT_EMIT } from "../../constants/constants.js";
 // Function to calculate bill (needs implementation)
 // import { calculateBill } from "../services/billingService.js";
 
+type SessionWithVehicle = Prisma.ParkingSessionGetPayload<{
+    include: { vehicle: { select: { plate: true } } }
+}>;
+
 export const handleSlotExit = async (slot_id: string, timestamp: any) => {
+
+    const Emitter = getEmitter();
     const eventTimestamp = new Date(timestamp);
 
     // 1. Get slot data BEFORE clearing it
@@ -23,12 +31,12 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
 
     // If slot was already available, log it and exit (Idempotency/Correction)
     if (leavingSlot.status === SlotStatus.AVAILABLE) {
-         console.warn(`🔄 Slot ${slot_id} is already AVAILABLE. Ignoring exit event.`);
-         return;
+        console.warn(`🔄 Slot ${slot_id} is already AVAILABLE. Ignoring exit event.`);
+        return;
     }
 
 
-    let activeSession: any = null; // Use Prisma types later
+    let activeSession: SessionWithVehicle | null = null;
 
     // --- 2. Find the Correct Active Session ---
 
@@ -38,18 +46,29 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
         console.log(`Exit from CONFLICTED slot ${slot_id}. Searching session by plate: ${plateNumber}`);
         // Find vehicle first
         const vehicle = await prisma.vehicle.findUnique({ where: { plate: plateNumber } });
+
+
+        console.log(`🧹 Cleared CONFLICT status from slot ${slot_id} as vehicle ${plateNumber} left.`);
         if (vehicle) {
+            // const violatorSession = await prisma.parkingSession.findFirst({
             activeSession = await prisma.parkingSession.findFirst({
+
                 where: {
                     vehicleId: vehicle.id, // Search by Vehicle ID
                     status: ParkingSessionStatus.ACTIVE
                 },
                 include: { vehicle: { select: { plate: true } } }
             });
+
+            // if (violatorSession) {
+            //     console.log(`🏃 Violator ${plateNumber} is likely moving to his correct slot. Keeping session ${violatorSession.id} open.`);
+            //     return;
+            // }
+
         } else {
-             console.warn(`Could not find vehicle with plate ${plateNumber} for conflicted slot exit.`);
-             // Alert might be needed
-               await Alert.create({
+            console.warn(`Could not find vehicle with plate ${plateNumber} for conflicted slot exit.`);
+            // Alert might be needed
+            await Alert.create({
                 alert_type: AlertType.SUSPICIOUS_ACTIVITY,
                 title: 'Leaving car without A session',
                 description: `Vehicle [${plateNumber}] is leaving  slot [${slot_id}] and he has no parking session avilable`,
@@ -65,8 +84,8 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
     }
     // Case B: Slot was OCCUPIED (Normal Exit) or ASSIGNED (User left before occupying - less likely but possible)
     else if (leavingSlot.status === SlotStatus.OCCUPIED || leavingSlot.status === SlotStatus.ASSIGNED) {
-         console.log(`Exit from ${leavingSlot.status} slot ${slot_id}. Searching session by slotId.`);
-         activeSession = await prisma.parkingSession.findFirst({
+        console.log(`Exit from ${leavingSlot.status} slot ${slot_id}. Searching session by slotId.`);
+        activeSession = await prisma.parkingSession.findFirst({
             where: {
                 slotId: slot_id,
                 status: ParkingSessionStatus.ACTIVE
@@ -76,13 +95,13 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
     }
     // Case C: Slot was in another state (MAINTENANCE with violator, etc.)
     else {
-         console.warn(`Exit event received for slot ${slot_id} with unexpected status: ${leavingSlot.status}. Clearing slot.`);
-         // Just clear the slot, no session to close
-         await ParkingSlot.updateOne(
-             { _id: slot_id },
-             { $set: { status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null } } // Clear everything
-         );
-         return; // Exit
+        console.warn(`Exit event received for slot ${slot_id} with unexpected status: ${leavingSlot.status}. Clearing slot.`);
+        // Just clear the slot, no session to close
+        await ParkingSlot.updateOne(
+            { _id: slot_id },
+            { $set: { status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null } } // Clear everything
+        );
+        return; // Exit
     }
 
     // --- 3. Process the Found Session (or handle not found) ---
@@ -100,9 +119,9 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
         });
         // Clear the slot anyway to prevent blocking
         await ParkingSlot.updateOne(
-             { _id: slot_id },
-             { $set: { status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null } }
-         );
+            { _id: slot_id },
+            { $set: { status: SlotStatus.AVAILABLE, current_vehicle: null, conflict_details: null, violating_vehicle: null } }
+        );
         return; // Exit
     }
 
@@ -127,19 +146,21 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
     const closedSession = await prisma.parkingSession.update({
         where: { id: activeSession.id },
         data: {
-            status: ParkingSessionStatus.COMPLETED,
+            status: ParkingSessionStatus.EXITING,
             exitTime: eventTimestamp,
             // Clear job IDs just in case
             exitCheckJobId: null,
             occupancyCheckJobId: null
         },
-        include:{vehicle:true}
+        include: { vehicle: true }
     });
-    
-    try{
+
+    try {
         // --- 6. Calculate Bill & Add Payment Job ---
         const billAmount = calculateBill(closedSession); // Implement this function based on rates and overtime fields
         console.log(`Calculated bill for session ${closedSession.id}: ${billAmount}`);
+
+
         await paymentQueue.add('process-payment', {
             sessionId: closedSession.id,
             amount: billAmount,
@@ -148,7 +169,7 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
             // Add other necessary payment details
         }, { priority: 7 }); // Example priority
     }
-    catch(err:any){
+    catch (err: any) {
         console.log(`couldn't complete the billing phase ${err.message}`)
     }
 
@@ -158,14 +179,23 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
         {
             $set: {
                 status: SlotStatus.AVAILABLE,
-                current_vehicle: null,
-                conflict_details: null, // Ensure conflict details are cleared
-                violating_vehicle: null // Ensure violator details are cleared
+                current_vehicle: {},
+                conflict_details: {}, // Ensure conflict details are cleared
+                violating_vehicle: {} // Ensure violator details are cleared
             }
             // Maybe reset stats if needed, or do it in a separate daily job
             // $set: { 'stats.last_used': eventTimestamp } // Example
         }
     );
+
+    Emitter.to(`user_${activeSession.userId}`).emit(HANDLE_SLOT_EXIT_EMIT, {
+        type: "EXITING_SLOT",
+        message: `you have exited the slot ${slot_id}, Your session is completed. Please proceed to the exit gate.`,
+        conflictStatus: activeSession.involvedInConflict,
+
+        sessionId: activeSession.id
+    });
+    console.log("⚔ Emit exiting slot message has been sent to the user")
 
     console.log(`✅ Session ${closedSession.id} closed. Slot ${slot_id} set to AVAILABLE.`);
     return; // Job successful

@@ -53,9 +53,9 @@ async function seedMongo() {
         // 2. تجهيز الـ Default State لكل مكان
         const defaultState = {
             status: SlotStatus.AVAILABLE,
-            current_vehicle: null,
-            conflict_details: null,
-            violating_vehicle: null,
+            current_vehicle: {}, // 👈 خليها أوبجيكت فاضي بدل null
+            conflict_details: {}, // 👈 نفس الكلام هنا
+            violating_vehicle: {}, // 👈 وهنا برضه
             stats: { total_uses_today: 0 }
         };
 

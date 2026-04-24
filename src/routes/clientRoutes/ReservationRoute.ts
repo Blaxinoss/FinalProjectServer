@@ -27,6 +27,9 @@ router.post("/", async (req: Request, res: Response) => {
   let paymentIntentId: string | null = null;
 
   try {
+    console.log(`\n\n🟢 [DEBUG - NEW RESERVATION REQUEST] ===============================`);
+    console.log(`👤 User: ${userId} | 🚗 Plate: ${plateNumber} | ⚡ Immediate: ${isImmediate}`);
+
     // 1. --- 🛡️ الأساسيات (Basic Validation) ---
     if (!plateNumber || !startTime || !endTime || !paymentTypeDecision || (!startTime && !isImmediate)) {
       return res.status(400).json({ error: "All fields are required." });
@@ -34,7 +37,9 @@ router.post("/", async (req: Request, res: Response) => {
     const start = isImmediate ? new Date() : new Date(startTime);
     const end = new Date(endTime);
     const now = new Date();
-    now.setSeconds(now.getSeconds() - 30); // Buffer للـ Network Latency
+    now.setSeconds(now.getSeconds() - 30);
+
+    console.log(`🕒 Requested Start: ${start.toISOString()} | End: ${end.toISOString()}`);
 
     if (start >= end || (start < now && !isImmediate)) {
       return res.status(400).json({ error: "Invalid time range." });
@@ -54,44 +59,59 @@ router.post("/", async (req: Request, res: Response) => {
     if (durationInHours > MAX_RESERVATION_HOURS) {
       return res.status(400).json({ error: `You cannot reserve a slot for more than ${MAX_RESERVATION_HOURS} hours.` });
     }
+
     // 3. --- 🚫 منع الحجز المزدوج (Double Booking Check) ---
     const existingActiveReservation = await prisma.reservation.findFirst({
       where: {
         userId: userId,
         status: ReservationsStatus.CONFIRMED,
-        endTime: { gt: new Date() } // حجز لسه مخلصش
+        endTime: { gt: new Date() }
       }
     });
 
     if (existingActiveReservation) {
+      console.log(`❌ [DEBUG] User already has an active reservation: ${existingActiveReservation.id}`);
       return res.status(400).json({ error: "You already have an active reservation." });
     }
 
     // 4. --- 🧠 البحث الذكي عن مكان (Smart Search) ---
-    // بنجيب الأماكن المشغولة سواء بحجز أو بجلسة ركن فعالية
-    const busyFromReservations = (await prisma.reservation.findMany({
+    console.log(`🔍 [DEBUG] Searching for busy slots between ${start.toISOString()} and ${end.toISOString()}...`);
+
+    // 🚨 المشكلة المحتملة رقم 1: status: { not: 'CANCELLED' } 
+    // لو الحجز خلص (COMPLETED) بس وقته لسه ماجاش (مثلا مشي بدري)، هيفضل حاجز المكان!
+    // الأفضل تخليها: status: 'CONFIRMED' أو تضيف 'COMPLETED' للـ not.
+    const busyFromReservationsDocs = await prisma.reservation.findMany({
       where: {
-        status: { not: 'CANCELLED' },
+        status: { not: "FULFILLED" }, // 👈 راقب دي في الديباج
         startTime: { lt: end },
         endTime: { gt: start }
       },
-      select: { slotId: true }
-    })).map(r => r.slotId);
+      select: { id: true, slotId: true, status: true }
+    });
+    const busyFromReservations = busyFromReservationsDocs.map(r => r.slotId);
 
-    const busyFromSessions = (await prisma.parkingSession.findMany({
+    console.log(`📅 [DEBUG] Busy from Reservations:`, busyFromReservationsDocs.map(r => `Slot: ${r.slotId} (ResID: ${r.id}, Status: ${r.status})`));
+
+    const busyFromSessionsDocs = await prisma.parkingSession.findMany({
       where: {
         status: ParkingSessionStatus.ACTIVE,
         expectedExitTime: { gt: start }
       },
-      select: { slotId: true }
-    })).map(s => s.slotId);
+      select: { id: true, slotId: true }
+    });
+    const busyFromSessions = busyFromSessionsDocs.map(s => s.slotId);
+
+    console.log(`🚗 [DEBUG] Busy from Active Sessions:`, busyFromSessionsDocs.map(s => `Slot: ${s.slotId} (SessionID: ${s.id})`));
 
     const busySlotIds = [...new Set([...busyFromReservations, ...busyFromSessions])];
+    console.log(`🧱 [DEBUG] ALL Busy Slot IDs combined:`, busySlotIds);
 
     // محاولة إيجاد مكان فاضي تماماً
     const trulyFreeSlot = await prisma.parkingSlot.findFirst({
       where: { id: { notIn: busySlotIds }, type: { not: 'EMERGENCY' } }
     });
+
+    console.log(`🎯 [DEBUG] Truly Free Slot Found? :`, trulyFreeSlot ? trulyFreeSlot.id : 'NONE');
 
     let chosenSlotId: string | null = null;
     let isStacked = false;
@@ -99,6 +119,7 @@ router.post("/", async (req: Request, res: Response) => {
     if (trulyFreeSlot) {
       chosenSlotId = trulyFreeSlot.id;
     } else {
+      console.log(`⚠️ [DEBUG] No truly free slot. Attempting Stacking Logic...`);
       // محاولة البحث عن مكان بنظام التكديس (Stacking)
       const stackable = await prisma.reservation.findFirst({
         where: {
@@ -108,21 +129,27 @@ router.post("/", async (req: Request, res: Response) => {
         orderBy: { endTime: 'desc' },
       });
 
+      console.log(`🥞 [DEBUG] Stackable Candidate Found? :`, stackable ? `Slot: ${stackable.slotId} (End: ${stackable.endTime})` : 'NONE');
+
       if (stackable && !busySlotIds.includes(stackable.slotId)) {
         chosenSlotId = stackable.slotId;
         isStacked = true;
+        console.log(`✅ [DEBUG] Stackable Slot APPROVED: ${chosenSlotId}`);
+      } else {
+        console.log(`❌ [DEBUG] Stackable Slot REJECTED (Already in busySlotIds)`);
       }
     }
+
+    console.log(`🏁 [DEBUG] FINAL CHOSEN SLOT: ${chosenSlotId} | Is Stacked? ${isStacked}`);
+    console.log(`====================================================================\n`);
 
     // 5. --- ⛔ التحقق النهائي من وجود مكان ---
     if (!chosenSlotId) {
       return res.status(409).json({ error: "No available slots for the selected time." });
     }
 
-
-
+    // ... (باقي كود الدفع وإنشاء الحجز زي ما هو) ...
     // 6. --- 💳 عملية الدفع (Stripe Hold) ---
-    // بنعملها هنا "بعد" ما اتأكدنا إن فيه مكان، عشان منسحبش فلوس ونقول لليوزر "مفيش مكان معلش"
     if (paymentTypeDecision === paymentMethod.CARD) {
       if (!paymentMethodId || !user.paymentGatewayToken) {
         return res.status(400).json({ error: "Card details missing or user not linked to Stripe." });
@@ -157,8 +184,6 @@ router.post("/", async (req: Request, res: Response) => {
       },
     });
 
-
-
     if (isImmediate) {
       await ParkingSlot.updateOne({
         _id: chosenSlotId
@@ -168,9 +193,8 @@ router.post("/", async (req: Request, res: Response) => {
           "current_vehicle.reservation_id": reservation.id
         }
       })
-      console.log(`🗺️ Slot ${chosenSlotId} marked as RESERVED for immediate booking.`);
+      console.log(`🗺️ Slot ${chosenSlotId} marked as RESERVED in Mongo for immediate booking.`);
     }
-
 
     await sessionLifecycleQueue.add("check-reservation-not-moving", {
       reservationId: reservation.id
@@ -180,7 +204,6 @@ router.post("/", async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("Critical Error:", error);
-    // لو حصل مشكلة بعد ما عملنا الـ Hold للفلوس، يفضل تعمل لها Cancel هنا
     res.status(500).json({
       error: `Internal server error: ${error.raw?.message || error.message || "Unknown error"}`
     });

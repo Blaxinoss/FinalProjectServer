@@ -51,14 +51,14 @@ async function seedMongo() {
 
     const defaultState = {
         status: SlotStatus.AVAILABLE,
-        current_vehicle: null,
-        conflict_details: null,
-        violating_vehicle: null,
+        current_vehicle: {},
+        conflict_details: {},
+        violating_vehicle: {},
         stats: { total_uses_today: 0 }
     };
 
     const slotsToCreate = [
-        { _id: 'A-01', ...defaultState },
+        { _id: 'A-01', ...defaultState, status: SlotStatus.ASSIGNED, current_vehicle: { plate_number: "A B C 111" } },
         { _id: 'A-02', ...defaultState },
         { _id: 'B-01', ...defaultState },
         { _id: 'EMG-01', ...defaultState },

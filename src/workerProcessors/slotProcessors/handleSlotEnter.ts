@@ -7,12 +7,19 @@ import { Alert } from "../../mongo_Models/alert.js";
 import { sendFCMNotification } from "../../services/notifications.js";
 
 import { findSafeAlternativeSlot } from "../Helpers/helpers.js";
-import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../../constants/constants.js";
+import { HANDLE_HAS_DONE_VIOLATION, HANDLE_SLOT_ENTER_EMIT, HANDLE_SLOT_HAS_BEEN_OVERTAKEN, OCCUPANCY_CHECK_DELAY_AFTER_ENTRY } from "../../constants/constants.js";
 import { getAvailableEmergencySlotId } from "./getEmergencySlots.js";
+import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
+interface SlotEnterParams {
+    slot_id: string;
+    plate_number: string | null;
+    timestamp: any;
+}
 
-export const handleSlotEnter = async (slot_id: string, plate_number: string | null, timestamp: any) => { // plate_number can be null
+export const handleSlotEnter = async ({ slot_id, plate_number, timestamp }: SlotEnterParams) => {
+    const Emitter = getEmitter();
 
-    // If no plate number detected, we can't do much matching, maybe just log or create a basic alert
+
     if (!plate_number) {
         console.warn(`🅿️ Slot ${slot_id} occupied, but no plate number detected.`);
         // Optionally update slot to OCCUPIED without vehicle details, or create an alert
@@ -22,11 +29,20 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
             title: 'Occupancy Without Plate',
             description: `Slot ${slot_id} became occupied but no license plate was detected.`,
             severity: AlertSeverity.LOW,
-            timestamp: new Date(timestamp),
+            timestamp: new Date(timestamp) instanceof Date ? new Date(timestamp) : new Date(),
             details: { slotId: slot_id }
         });
         return; // Exit early
     }
+
+    const userVehicle = await prisma.vehicle.findUnique({
+        where: {
+            plate: plate_number
+        }
+    })
+
+    // If no plate number detected, we can't do much matching, maybe just log or create a basic alert
+
 
     // Use lean() for performance if not modifying the object directly after fetching
     const TargetSlot = await ParkingSlot.findById(slot_id).lean();
@@ -52,12 +68,19 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                     {
                         $set: {
                             status: SlotStatus.OCCUPIED,
-                            'current_vehicle.occupied_since': eventTimestamp
+                            current_vehicle: {
+                                ...TargetSlot.current_vehicle,
+                                occupied_since: eventTimestamp
+                            }
                         },
                         $inc: { 'stats.total_uses_today': 1 }
                     }
                 );
 
+                Emitter.to(`user_${userVehicle?.userId}`).emit(HANDLE_SLOT_ENTER_EMIT, {
+                    type: "SLOT_ENTER_SUCCESS",
+                    message: "You have parked, your car is now safe!"
+                })
                 // Cancel the occupancy check job (no longer needed)
                 try {
                     const session = await prisma.parkingSession.findFirst({
@@ -120,18 +143,17 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
 
 
                     const violatorVehicle = await prisma.vehicle.findUnique({ where: { plate: plate_number } });
-
+                    let violatorSession = null;
                     if (violatorVehicle) {
-                        const violatorSession = await prisma.parkingSession.findFirst({
+                        violatorSession = await prisma.parkingSession.findFirst({
                             where: { vehicleId: violatorVehicle.id, status: ParkingSessionStatus.ACTIVE },
-                            select: { id: true, slotId: true, occupancyCheckJobId: true } // هات المكان الأصلي والجوب
+                            select: { id: true, slotId: true, occupancyCheckJobId: true, userId: true } // هات المكان الأصلي والجوب
                         });
 
                         if (violatorSession && violatorSession.slotId && violatorSession.slotId !== slot_id) {
 
                             await ParkingSlot.updateOne({
                                 _id: violatorSession.slotId,
-                                status: SlotStatus.ASSIGNED,
                             }, {
                                 $set: {
                                     status: SlotStatus.AVAILABLE,
@@ -148,7 +170,9 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                         }
                     } else {
                         console.log(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
-                        throw new Error(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
+                        // throw new Error(`couldn't mark the violated session ${plate_number}  as involvedInConflict `)
+                        //thorw will stop the logic and exit the job right here 
+
                     }
 
 
@@ -264,6 +288,30 @@ export const handleSlotEnter = async (slot_id: string, plate_number: string | nu
                             // await prisma.parkingSession.update({ where: { id: affectedUserSession.id }, data: { status: ParkingSessionStatus.CONFLICT } });
                         }
                     }
+
+                    //Emit to the affected user
+                    if (newSlotId) {
+                        Emitter.to(`user_${affectedUserSession.userId}`).emit(HANDLE_SLOT_HAS_BEEN_OVERTAKEN, {
+                            type: "SLOT_OVERTAKEN",
+                            title: notificationTitle,
+                            message: notificationBody,
+                            newSlotId: newSlotId,
+                            sessionId: affectedUserSession.id
+                        })
+                    }
+
+                    if (violatorSession?.id) {
+                        // Emit to the vaiolator 
+                        Emitter.to(`user_${violatorSession.userId}`).emit(HANDLE_HAS_DONE_VIOLATION, {
+                            type: "SLOT_VIOLATION",
+                            title: "⚠️ Wrong Slot Occupied",
+                            message: "You parked in a reserved slot. A violation penalty has been added to your session.",
+                            sessionId: violatorSession.id,
+                            newSlotId: newSlotId
+                        })
+                    }
+
+
                     if (affectedUserSession.user.notificationToken) {
                         await sendFCMNotification(
                             affectedUserSession.user.notificationToken,

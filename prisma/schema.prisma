@@ -25,6 +25,7 @@ enum ParkingSessionStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  EXITING
 }
 
 enum TransactionStatus {

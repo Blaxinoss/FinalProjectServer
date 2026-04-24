@@ -39,9 +39,9 @@ const ParkingSlotSchema = new mongoose.Schema<IParkingSlot>({
   _id: { type: String, required: true }, // slot_id
   status: { type: String, enum: Object.values(SlotStatus), required: true, default: SlotStatus.AVAILABLE },
   current_vehicle: {
-    plate_number: { type: String, trim: true },
-    occupied_since: { type: Date },
-    reservation_id: { type: String }
+    plate_number: { type: String, trim: true, default: null },
+    occupied_since: { type: Date, default: null },
+    reservation_id: { type: String, default: null }
   },
   conflict_details: {
     expected_plate: { type: String },
