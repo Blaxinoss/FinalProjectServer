@@ -12,7 +12,7 @@ import { admin } from "./firebaseAdmin.js";
 //     body: string, 
 //     data: object = {}
 // ) => {
-    
+
 //     // 1. جلب التوكن (كما هو)
 //     const user = await prisma.user.findUnique({
 //         where: { id: userId },
@@ -64,30 +64,33 @@ import { admin } from "./firebaseAdmin.js";
 // مثال على رمز تسجيل يجب أن يكون لديك من الفرونت إند
 // يجب أن تحصل على هذا الرمز من قاعدة بياناتك
 
-export async function sendFCMNotification(token:string,   title: string, 
-     body: string,data?:object) {
+export async function sendFCMNotification(token: string, title: string,
+  body: string, data?: object) {
   try {
 
-   
+
     const response = await admin.messaging().send({
       token: token,
+
+      data: data ? (data as any) : {},
+
       notification: {
         title,
         body,
       },
-      
+
     });
 
     console.log('notification sent successfuly ✅', response);
     // يمكنك هنا تسجيل النجاح في قاعدة البيانات أو سجلات الخادم
     return response;
 
-  } catch (error:any) {
+  } catch (error: any) {
     console.error('An error occured while sending the notifcation❌', error);
     if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
-        console.log(`this token is not valid anymore and should be deleted: ${token}`);
+      console.log(`this token is not valid anymore and should be deleted: ${token}`);
     }
-    
+
     throw error;
   }
 }

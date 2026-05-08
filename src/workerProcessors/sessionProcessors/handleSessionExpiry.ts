@@ -52,6 +52,7 @@ console.warn(`Job ${job.id} ran, but session ${parkingSessionId} not found.`);
 
         // أ. أرسل تنبيه للمستخدم (زي ما أنت عملت)
         if (session.user.notificationToken) {
+            
             sendFCMNotification(session.user.notificationToken, "Your session ended!","Your session has expired. A 10-minute grace period has started.");
         } else {
             console.warn(`No notification token found for user in session ${session.id}`);

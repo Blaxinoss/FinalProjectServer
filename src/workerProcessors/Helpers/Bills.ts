@@ -20,11 +20,21 @@ export const calculateBill = (session: ParkingSession): number => {
         return 0;
     }
 
-    if (session.exitTime < session.entryTime) {
-         console.error(`Billing Error: Session ${session.id} exit time is before entry time.`);
-         return 0; // Invalid data
+    const entryMs = new Date(session.entryTime).getTime();
+    const exitMs = new Date(session.exitTime).getTime();
+
+    // 2. التحقق من إن التاريخ سليم (مش Invalid Date)
+    if (isNaN(entryMs) || isNaN(exitMs)) {
+        console.error(`Billing Error: Session ${session.id} has invalid date formats.`);
+        return 0;
     }
-    
+
+    // 3. التحقق من آلة الزمن (الخروج قبل الدخول)
+    if (exitMs < entryMs) {
+        // ضفت هنا الـ Dates في اللوج عشان لو حصلت تاني، تعرف مين اللي وقته غلط بالظبط
+        console.error(`Billing Error: Session ${session.id} exit time (${new Date(exitMs).toISOString()}) is before entry time (${new Date(entryMs).toISOString()}).`);
+        return 0;
+    }
 
     // --- 1. Calculate Total Duration ---
     const totalMinutes = calculateDurationMinutes(session.entryTime, session.exitTime);
@@ -38,7 +48,7 @@ export const calculateBill = (session: ParkingSession): number => {
         console.log(`Session ${session.id}: Overtime detected, starting calculation.`);
         // Determine the end of the penalty period
         const penaltyEndTime = session.overtimeEndTime || session.exitTime; // Use overTimeEndTime if set, otherwise the session exit
-        
+
         const penaltyMinutes = calculateDurationMinutes(session.overtimeStartTime, penaltyEndTime);
 
         if (penaltyMinutes > 0) {
@@ -47,7 +57,7 @@ export const calculateBill = (session: ParkingSession): number => {
             console.log(`Session ${session.id}: Penalty duration = ${penaltyMinutes} mins. Adding difference = ${penaltyCostDifference} EGP.`);
             amount += penaltyCostDifference;
         } else {
-             console.warn(`Session ${session.id}: Overtime start time exists, but penalty duration is zero or negative.`);
+            console.warn(`Session ${session.id}: Overtime start time exists, but penalty duration is zero or negative.`);
         }
     }
 
@@ -60,18 +70,18 @@ export const calculateBill = (session: ParkingSession): number => {
 
     // --- 🛡️ Layer 2: Minimum Charge ---
     if (amount < MINIMUM_CHARGE && totalMinutes > 0) {
-         console.log(`Session ${session.id}: Calculated amount ${amount} is less than minimum ${MINIMUM_CHARGE}. Adjusting.`);
-         amount = MINIMUM_CHARGE;
+        console.log(`Session ${session.id}: Calculated amount ${amount} is less than minimum ${MINIMUM_CHARGE}. Adjusting.`);
+        amount = MINIMUM_CHARGE;
     } else if (totalMinutes === 0 && amount === 0) {
         // Handle zero duration - maybe still apply minimum if entry/exit same minute? Optional.
         // For now, zero duration = zero cost unless minimum applies differently.
-         console.log(`Session ${session.id}: Zero duration, zero cost.`);
-         amount = 0; // Ensure it's zero
+        console.log(`Session ${session.id}: Zero duration, zero cost.`);
+        amount = 0; // Ensure it's zero
     }
     // --- 5. Final Amount (Optional: Rounding) ---
     // Example: Round to 2 decimal places
     const finalAmount = Math.round(amount * 100);
-    console.log(`Session ${session.id}: Final bill amount = ${finalAmount/100} EGP.`);
+    console.log(`Session ${session.id}: Final bill amount = ${finalAmount / 100} EGP.`);
 
     return finalAmount;
 };

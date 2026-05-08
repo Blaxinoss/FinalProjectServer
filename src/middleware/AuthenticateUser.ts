@@ -6,10 +6,17 @@ import type { User } from "../../src/generated/prisma/client.js";
 declare global {
   namespace Express {
     interface Request {
-      user? : Partial<User>;
+      user?: Partial<User>;
     }
   }
 }
+
+//TODO:
+// THE QUERY FROM THE DATABASE IS EXPENSIVE FOR EACH ROUTE CALL
+// EMBEED THE DATA YOU NEED IN THE FIREBASE TOKEN ITSELF 
+
+
+//HTTP IS STATELESS THAT"S WHY I AM INJECTING IN EACH REQ
 
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -22,16 +29,16 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
     const decodedToken = await admin.auth().verifyIdToken(idToken);
 
     const user = await prisma.user.findUnique({
-        where:{
-            uuid : decodedToken.uid
-        }
+      where: {
+        uuid: decodedToken.uid
+      }
     })
 
-    if(!user){
-        return res.status(401).json({message:"unauthorized user, no such user in database"})
+    if (!user) {
+      return res.status(401).json({ message: "unauthorized user, no such user in database" })
     }
     // Attach user info to request object
-    req.user = {role:user.role,id:user.id};
+    req.user = { role: user.role, id: user.id };
     next();
   } catch (error) {
     console.error("Authentication error:", error);

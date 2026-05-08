@@ -1,87 +1,78 @@
 // routes/webhookRoutes.ts
-import { Router } from 'express';
+import type { Request, Response } from 'express';
+import express, { Router } from 'express';
+import { TransactionStatus } from '../../src/generated/prisma/index.js';
+import { DEBT_CLEARED } from '../constants/constants.js';
+import { getEmitter } from '../db&init/redisWorkerEmitterWithClient.js';
 import { prisma } from '../routes/prsimaForRouters.js';
 import { stripe } from '../services/stripe.js';
-import Stripe from 'stripe';
-import { TransactionStatus } from '../../src/generated/prisma/index.js';
-
 const router = Router();
 
-// ده الـ Secret اللي جبته من داش بورد Stripe وحطيته في .env
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
-// POST /api/webhooks/stripe
-router.post('/stripe', async (req, res) => {
+// لاحظ استخدمنا express.raw هنا عشان سترايب
+router.post('/stripe', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'] as string;
-    const body = req.body; // (ده الـ Raw Body عشان السطر اللي ضفناه في app.ts)
+    const Emitter = getEmitter();
+    // السيكرت ده بتجيبه من داشبورد سترايب (صفحة الـ Webhooks)
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-    let event: Stripe.Event;
+    let event;
 
-    // --- 1. التحقق من إن الرسالة دي جاية من Stripe فعلًا ---
     try {
-        event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
-        console.log('Webhook signature verified.');
+        // الخطوة دي بتضمن إن الريكويست جاي من سترايب فعلاً مش من هاكر
+        event = await stripe.webhooks.constructEventAsync(req.body, sig, endpointSecret);
     } catch (err: any) {
-        console.error(`❌ Webhook signature verification failed:`, err.message);
+        console.error(`❌ Webhook Error: ${err.message}`);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // --- 2. معالجة الحدث (هنا اللوجيك بتاعك) ---
-    try {
-        // إحنا يهمنا بس الحدث ده:
-        if (event.type === 'checkout.session.completed') {
-            const session = event.data.object as Stripe.Checkout.Session;
+    // إحنا مهتمين بحدث "نجاح الدفع" بس
+    if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object as any;
 
-            // 3. هات الـ ID الداخلي بتاعنا اللي خزنّاه في الـ metadata
-            const internalTxnId = session.metadata?.parking_session_id;
+        // ✨ هنا بنستلم الـ metadata اللي بعتناها وإحنا بنكريت الـ PaymentIntent
+        const { transactionId, userId } = paymentIntent.metadata;
+        const Int_transactionId = parseInt(transactionId)
+        const Int_userId = parseInt(userId);
+        if (transactionId && userId) {
+            console.log(`✅ Webhook: Payment successful for Transaction: ${Int_transactionId}`);
 
-            if (!internalTxnId) {
-                console.error(`CRITICAL: Webhook ${event.id} completed, but no parking_session_id!`);
-                return res.status(400).send('Missing metadata.');
-            }
-
-            // 4. ابحث عن المعاملة
-            const paymentTransaction = await prisma.paymentTransaction.findUnique({
-                where: { id: parseInt(internalTxnId) }, // ⬅️ حوله لـ Int
-                include: { parkingSession: { include: { vehicle: true } } } // هات الجلسة والعربية
-            });
-
-            if (!paymentTransaction) {
-                 console.error(`CRITICAL: Webhook ${event.id} refers to non-existent transaction ${internalTxnId}.`);
-                 return res.status(404).send('Transaction not found.');
-            }
-
-            // 5. تحديث المعاملة (لو كانت لسه مش COMPLETED)
-            if (paymentTransaction.transactionStatus !== TransactionStatus.COMPLETED) {
-                await prisma.paymentTransaction.update({
-                    where: { id: paymentTransaction.id },
+            try {
+                // 1. تحديث حالة المعاملة لـ COMPLETED
+                const updatedTx = await prisma.paymentTransaction.update({
+                    where: { id: Int_transactionId },
                     data: {
                         transactionStatus: TransactionStatus.COMPLETED,
-                        paidAt: new Date()
-                    }
+                        paidAt: new Date() // لو عندك حقل لده
+                    },
+                    include: { parkingSession: true, }
                 });
 
-                // 6. ⬛️ شيل العربية من القائمة السوداء ⬛️
-                await prisma.vehicle.update({
-                    where: { id: paymentTransaction.parkingSession.vehicleId },
+                // 2. فك الحظر (Blacklist) عن اليوزر
+                await prisma.user.update({
+                    where: { id: Int_userId },
                     data: { hasOutstandingDebt: false }
                 });
 
-                console.log(`✅ Debt paid for transaction ${internalTxnId}. Vehicle ${paymentTransaction.parkingSession.vehicle.plate} removed from blacklist.`);
-            } else {
-                 console.log(`Webhook received for already completed transaction ${internalTxnId}. Ignoring.`);
+                // 3. فك الحظر عن العربية (لو محتاج)
+                if (updatedTx.parkingSession?.vehicleId) {
+                    await prisma.vehicle.update({
+                        where: { id: updatedTx.parkingSession.vehicleId },
+                        data: { hasOutstandingDebt: false }
+                    });
+                }
+
+                console.log(`🔓 User ${Int_userId} and their vehicle are now cleared from blacklist.`);
+
+                Emitter.to(`user_${Int_userId}`).emit(DEBT_CLEARED, { message: "Your account is active again!" });
+
+            } catch (dbError) {
+                console.error("Database update failed inside webhook:", dbError);
             }
-        } else {
-            console.log(`Received unhandled webhook event type: ${event.type}`);
         }
-
-        // --- 7. رجع 200 لـ Stripe (عشان يعرف إنك استلمت) ---
-        res.status(200).json({ received: true });
-
-    } catch (error: any) {
-         console.error(`Error processing webhook event ${event.id}:`, error.message);
-         res.status(500).json({ error: 'Internal server error' });
     }
+
+    // 🔴 لازم دايماً نرد على سترايب بـ 200، وإلا هتفضل تبعت نفس الريكويست لمدة 3 أيام!
+    res.status(200).json({ received: true });
 });
 
 export default router;

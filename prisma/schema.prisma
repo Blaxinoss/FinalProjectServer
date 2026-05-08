@@ -11,24 +11,34 @@ generator client {
 
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
+enum GateType {
+  ENTRY
+  EXIT
+}
 
+enum GateStatus {
+  OPEN
+  CLOSED
+}
 
-enum ReservationsStatus{
+enum ReservationsStatus {
   CONFIRMED
   CANCELLED
   FULFILLED
   NO_SHOW
 }
 
-enum ParkingSessionStatus{
+enum ParkingSessionStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  EXITING
 }
 
-enum TransactionStatus{
+enum TransactionStatus {
   PENDING
   COMPLETED
   FAILED
@@ -41,113 +51,130 @@ enum SlotType {
   EMERGENCY
 }
 
-enum paymentMethod{
+enum paymentMethod {
   CASH
   CARD
   APPLICATION
   OTHER
 }
 
-enum userRole{
+enum userRole {
   ADMIN
-USER
+  USER
 }
-
 
 model User {
-  id              Int              @id @default(autoincrement())
-  name            String           @db.VarChar(100)
-  phone           String           @unique @db.VarChar(15)
-  email           String           @unique @db.VarChar(100)
-  uuid             String          @unique @db.VarChar(255)
-  role            userRole         @default(USER) 
-  NationalID      String           @unique @db.VarChar(20)
-  address         String           @db.VarChar(255)
-  licenseNumber   String           @unique @db.VarChar(50)
-paymentGatewayToken String? @unique @db.VarChar(255)
-  notificationToken String?      @db.VarChar(255)
-  licenseExpiry   DateTime
-  hasOutstandingDebt Boolean   @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  Vehicles        Vehicle[]
-  ParkingSessions ParkingSession[]
-  reservations    Reservation[]
+  id                  Int                  @id @default(autoincrement())
+  name                String               @db.VarChar(100)
+  phone               String               @unique @db.VarChar(15)
+  email               String               @unique @db.VarChar(100)
+  uuid                String               @unique @db.VarChar(255)
+  role                userRole             @default(USER)
+  NationalID          String               @unique @db.VarChar(20)
+  address             String               @db.VarChar(255)
+  licenseNumber       String               @unique @db.VarChar(50)
+  paymentGatewayToken String?              @unique @db.VarChar(255)
+  notificationToken   String?              @db.VarChar(255)
+  notificationAllowed Boolean              @default(true)
+  licenseExpiry       DateTime
+  paymentTransactions paymentTransaction[]
+  hasOutstandingDebt  Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  Vehicles            Vehicle[]
+  ParkingSessions     ParkingSession[]
+  reservations        Reservation[]
 }
 
-model ParkingSlot{
-  id          String   @id @db.VarChar(20)
-  type        SlotType  @default(REGULAR)
+model ParkingSlot {
+  id   String   @id @db.VarChar(20)
+  type SlotType @default(REGULAR)
 }
 
 model Vehicle {
-  id              Int              @id @default(autoincrement())
-  plate           String           @unique @db.VarChar(20)
-  color           String           @db.VarChar(50)
-  userId          Int
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt       DateTime         @default(now())
+  id                 Int              @id @default(autoincrement())
+  plate              String           @unique @db.VarChar(20)
+  color              String           @db.VarChar(50)
+  userId             Int
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
   //status: parked, exited
-  updatedAt       DateTime         @updatedAt
-  hasOutstandingDebt Boolean       @default(false)
-  ParkingSessions ParkingSession[]
-  reservations    Reservation[]
+  updatedAt          DateTime         @updatedAt
+  hasOutstandingDebt Boolean          @default(false)
+  ParkingSessions    ParkingSession[]
+  reservations       Reservation[]
 }
 
-
 model Reservation {
-  id Int @id @default(autoincrement())
-  userId   Int 
-  vehicleId Int 
-  user User  @relation(fields: [userId],references: [id],onDelete: Cascade)
-  vehicle Vehicle @relation(fields: [vehicleId],references: [id], onDelete: Cascade)
-  slotId String @db.VarChar(20)
-  startTime DateTime 
-  endTime DateTime
-  paymentType paymentMethod?
-  paymentIntentId String?  @unique
-  isStacked Boolean @default(false)
-  status ReservationsStatus  @default(CONFIRMED)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  parkingSession  ParkingSession?
+  id                  Int                  @id @default(autoincrement())
+  userId              Int
+  vehicleId           Int
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle             Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  slotId              String               @db.VarChar(20)
+  startTime           DateTime
+  endTime             DateTime
+  paymentType         paymentMethod?
+  paymentIntentId     String?              @unique
+  paymentTransactions paymentTransaction[]
+  isStacked           Boolean              @default(false)
+  status              ReservationsStatus   @default(CONFIRMED)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  parkingSession      ParkingSession?
 }
 
 model ParkingSession {
-  id                 Int                  @id @default(autoincrement())
-  userId             Int
-  vehicleId          Int
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vehicle            Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  slotId         String               @db.VarChar(20)
-  status             ParkingSessionStatus               @default(ACTIVE)// pending, active, completed
-  entryTime          DateTime             @default(now())
-  exitTime           DateTime?
-  exitCheckJobId  String?              @db.VarChar(100)
-  occupancyCheckJobId  String?          @db.VarChar(100)
-  paymentType paymentMethod?
-  paymentIntentId String?  @unique
-  isExtended        Boolean              @default(false)
-  overtimeStartTime DateTime?
-  overtimeEndTime   DateTime?
-  expectedExitTime DateTime
-  notes             String?             @db.MediumText
-  involvedInConflict Boolean @default(false)
-  paymentTransaction paymentTransaction[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  reservationId Int? @unique
-  reservation Reservation? @relation(fields: [reservationId],references: [id])
+  id                  Int                  @id @default(autoincrement())
+  userId              Int
+  vehicleId           Int
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle             Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  slotId              String               @db.VarChar(20)
+  status              ParkingSessionStatus @default(ACTIVE) // pending, active, completed
+  entryTime           DateTime             @default(now())
+  exitTime            DateTime?
+  exitCheckJobId      String?              @db.VarChar(100)
+  occupancyCheckJobId String?              @db.VarChar(100)
+  paymentType         paymentMethod?
+  paymentIntentId     String?              @unique
+  isExtended          Boolean              @default(false)
+  overtimeStartTime   DateTime?
+  overtimeEndTime     DateTime?
+  expectedExitTime    DateTime
+  notes               String?              @db.MediumText
+  involvedInConflict  Boolean              @default(false)
+  paymentTransaction  paymentTransaction[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  reservationId       Int?                 @unique
+  reservation         Reservation?         @relation(fields: [reservationId], references: [id])
 }
 
 model paymentTransaction {
-  id                Int            @id @default(autoincrement())
-  parkingSessionId  Int
-  parkingSession    ParkingSession @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
-  amount            Float          @db.Double
-  paymentMethod     paymentMethod?
-  paidAt            DateTime? 
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  transactionStatus TransactionStatus         @default(PENDING)// completed, failed, pending
+  id                  Int               @id @default(autoincrement())
+  parkingSessionId    Int?
+  userId              Int
+  stripeTransactionId String?           @db.VarChar(100)
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parkingSession      ParkingSession?   @relation(fields: [parkingSessionId], references: [id], onDelete: Cascade)
+  amount              Float             @db.Double
+  reservationId       Int?
+  reservation         Reservation?      @relation(fields: [reservationId], references: [id])
+  paymentMethod       paymentMethod?
+  stripeCheckoutUrl   String?
+  stripeSessionId     String?
+  paidAt              DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  transactionStatus   TransactionStatus @default(PENDING) // completed, failed, pending
+}
+
+model Gate {
+  id        String     @id @default(cuid())
+  name      String
+  type      GateType
+  status    GateStatus @default(CLOSED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }

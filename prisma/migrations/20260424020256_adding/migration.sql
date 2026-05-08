@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `parkingsession` MODIFY `status` ENUM('ACTIVE', 'COMPLETED', 'CANCELLED', 'EXITING') NOT NULL DEFAULT 'ACTIVE';

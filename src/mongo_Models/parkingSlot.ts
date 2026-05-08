@@ -1,6 +1,7 @@
 import mongoose, { Model } from "mongoose";
 import { SlotStatus } from "../types/parkingEventTypes.js";
-
+import { getEmitter } from "../db&init/redisWorkerEmitterWithClient.js";
+import { SLOT_STATUS_CHANGED_MESSAGE } from "../constants/constants.js";
 
 export interface ISlotStats {
   total_uses_today: number;
@@ -16,23 +17,17 @@ export interface ICurrentVehicle {
 }
 
 
-// interface ISlot{
-//     slot_id:string;
-//     status:SlotStatus;
-//     current_vehicle?:ICurrentVehicle;
-//   stats: ISlotStats;
-// }
-export interface IConflictDetails { // <--- ✅ Interface جديد
+export interface IConflictDetails {
   expected_plate: string;
-  assigned_session_id?: string; // أو رقم لو الـ ID عندك رقم
+  assigned_session_id?: string;
 }
 
 export interface IParkingSlot extends Document {
-  _id: string; // slot_id
+  _id: string;
   status: SlotStatus;
   current_vehicle: ICurrentVehicle;
-  stats: ISlotStats;  
-  conflict_details?: IConflictDetails; // <--- ✅ إضافة الحقل الاختياري
+  stats: ISlotStats;
+  conflict_details?: IConflictDetails;
 
 }
 
@@ -44,9 +39,9 @@ const ParkingSlotSchema = new mongoose.Schema<IParkingSlot>({
   _id: { type: String, required: true }, // slot_id
   status: { type: String, enum: Object.values(SlotStatus), required: true, default: SlotStatus.AVAILABLE },
   current_vehicle: {
-    plate_number: { type: String,trim: true },
-    occupied_since: { type: Date },
-    reservation_id: { type: String }
+    plate_number: { type: String, trim: true, default: null },
+    occupied_since: { type: Date, default: null },
+    reservation_id: { type: String, default: null }
   },
   conflict_details: {
     expected_plate: { type: String },
@@ -57,13 +52,36 @@ const ParkingSlotSchema = new mongoose.Schema<IParkingSlot>({
     average_duration_minutes: { type: Number, default: 0 },
     last_cleaned: { type: Date }
   }
-}, { timestamps: true,collection: 'parking_slots' });
+}, { timestamps: true, collection: 'parking_slots' });
 
 
 ParkingSlotSchema.index({ 'current_vehicle.plate_number': 1 });
 
 
 
+ParkingSlotSchema.post('updateOne', function () {
+  const filter = this.getQuery();
+  const update: any = this.getUpdate();
+  const slotId = filter._id || filter.id;
+
+  // 3. نستخرج الحالة الجديدة (سواء كنت باعتها جوه $set أو مباشر)
+  let newStatus = null;
+  if (update.$set && update.$set.status) {
+    newStatus = update.$set.status;
+  } else if (update.status) {
+    newStatus = update.status;
+  }
+
+  // 4. لو فعلاً التحديث كان بيغير الـ status، ابعت الإيفينت!
+  if (slotId && newStatus) {
+    const Emitter = getEmitter();
+    Emitter.emit(SLOT_STATUS_CHANGED_MESSAGE, {
+      slotId: slotId,
+      newStatus: newStatus
+    });
+    console.log(`📡 [Mongoose Hooks] Slot ${slotId} status broadcasted as ${newStatus}`);
+  }
+});
 
 
 export const ParkingSlot: Model<IParkingSlot> = mongoose.model<IParkingSlot>("parkingSlot", ParkingSlotSchema);

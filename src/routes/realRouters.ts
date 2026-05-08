@@ -11,13 +11,13 @@ const mainRouter = express.Router();
 
 
 //api/admin
-mainRouter.use('/admin',authenticateUser,requireAdminRule,AdminRouter)
+mainRouter.use('/admin', authenticateUser, requireAdminRule, AdminRouter)
 
 //api/client
-mainRouter.use('/client',authenticateUser,ClientRouter)
+mainRouter.use('/client', authenticateUser, ClientRouter)
 
 //api/public
-mainRouter.use('/public',PublicRouter)
+mainRouter.use('/public', PublicRouter)
 
 
 export default mainRouter;

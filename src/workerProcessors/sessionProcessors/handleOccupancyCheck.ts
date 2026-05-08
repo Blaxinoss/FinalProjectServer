@@ -1,25 +1,29 @@
 import { Job } from 'bullmq'; // Make sure Job is imported from bullmq
 import { ParkingSlot } from "../../mongo_Models/parkingSlot.js";
-import {prisma} from '../../routes/prsimaForRouters.js';
+import { prisma } from '../../routes/prsimaForRouters.js';
 import { ParkingSessionStatus } from "../../generated/prisma/client.js";
 import { AlertSeverity, AlertType, SlotStatus } from "../../types/parkingEventTypes.js"; // Import AlertType
 // Assuming GRACE_PERIOD_... is not needed here
 // import { GRACE_PERIOD_TO_LEAVE_AFTER_SESSION_END_TIME } from "../../constants/constants.js";
-import { sessionLifecycleQueue } from "../../queues/queues.js";
+import { sessionLifecycleQueue, paymentQueue } from "../../queues/queues.js";
 import { Alert } from "../../mongo_Models/alert.js";
-
+import { getEmitter } from '../../db&init/redisWorkerEmitterWithClient.js';
+import { calculateBill } from "../Helpers/Bills.js";
+import { OCCUPANCY_CHECK_DELAY_AFTER_ENTRY, SESSION_SLOT_NOT_OCCUPIED_BEFORE_TOLERANCETIME } from '../../constants/constants.js';
 /**
  * Handles the 'check-actual-occupancy' job.
  * Checks if a user actually occupied their assigned slot within the allowed time.
  * If not, cancels the session and frees the slot.
  */
 export const handleOccupancyCheck = async (job: Job) => { // Added Job type
+
+    const Emitter = getEmitter();
     const { parkingSessionId } = job.data;
 
     try {
         // --- 1. Get Session from Prisma ---
         const session = await prisma.parkingSession.findUnique({ // Use findUnique for ID
-            where: { id: parkingSessionId }
+            where: { id: parkingSessionId },
         });
 
         // --- 2. Check if Session is still Active ---
@@ -38,9 +42,11 @@ export const handleOccupancyCheck = async (job: Job) => { // Added Job type
         if (slot?.status === SlotStatus.ASSIGNED) {
             console.warn(`OccupancyCheck Job ${job.id}: User for session ${session.id} did NOT occupy slot ${session.slotId} within the time limit.`);
 
+
             // a. Create Alert for Dashboard
             await Alert.create({
-                type: AlertType.NO_SHOW, // Or a more specific type like SLOT_NOT_OCCUPIED
+                alert_type: AlertType.NO_SHOW, // Or a more specific type like SLOT_NOT_OCCUPIED
+                description: "User (ID: ${session.userId}) assigned slot ${session.slotId} for session ${session.id} did not occupy it within the check period.",
                 title: 'Slot Not Occupied by user after 10 min of enterance',
                 message: `User (ID: ${session.userId}) assigned slot ${session.slotId} for session ${session.id} did not occupy it within the check period.`,
                 severity: AlertSeverity.CRITICAL, // Or choose appropriate severity
@@ -54,8 +60,9 @@ export const handleOccupancyCheck = async (job: Job) => { // Added Job type
             });
 
             // b. Cancel the Parking Session in Prisma
-            await prisma.parkingSession.update({
+            const closedSession = await prisma.parkingSession.update({
                 where: { id: session.id },
+                include: { vehicle: true },
                 data: {
                     status: ParkingSessionStatus.CANCELLED, // Mark as cancelled or NO_SHOW
                     exitTime: new Date(),
@@ -83,6 +90,35 @@ export const handleOccupancyCheck = async (job: Job) => { // Added Job type
                 }
             );
             console.log(`OccupancyCheck Job ${job.id}: Slot ${session.slotId} status reset to AVAILABLE.`);
+
+            let bill = 0;
+            try {
+                bill = calculateBill(closedSession);
+                console.log(`calculating Bills for this non occupying session ${closedSession.id}, He must be charged anyway`);
+                console.log(`[Queue] Adding payment job for session: ${closedSession.id}, Amount: ${bill}`);
+                const transactionJob = await paymentQueue.add('payment-process', {
+                    sessionId: closedSession.id,
+                    amount: bill,
+                    userId: closedSession.userId,
+                    plateNumber: closedSession.vehicle.plate,
+                }, {
+                    attempts: 3,
+                    backoff: 5000
+                });
+                console.log(`[Success] Job created with ID: ${transactionJob.id}`);
+            } catch (err) {
+                console.error("Critical: Error while creating the payment job", err);
+            }
+
+
+
+
+            Emitter.to(`user_${session.userId}`).emit(SESSION_SLOT_NOT_OCCUPIED_BEFORE_TOLERANCETIME, {
+                type: "SESSION_CANCELLED",
+                message: `session has been canceled due to not occupying slot after the max tolerance
+                 time ${OCCUPANCY_CHECK_DELAY_AFTER_ENTRY}, Although the user is in the garage,
+				 you will be charged for ${bill / 100} the time you had in the garage, please move to the exit gate`
+            })
 
             return; // Job done
         } else {

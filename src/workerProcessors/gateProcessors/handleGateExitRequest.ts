@@ -1,20 +1,25 @@
 import type { Job } from "bullmq";
 import { prisma } from "../../routes/prsimaForRouters.js";
-import { paymentMethod, ParkingSessionStatus, TransactionStatus } from "../../generated/prisma/client.js"; // ⬅️ استيراد ParkingSessionStatus
+import { paymentMethod, ParkingSessionStatus, TransactionStatus, type ParkingSession } from "../../generated/prisma/client.js"; // ⬅️ استيراد ParkingSessionStatus
 import { getMQTTClient_IN_WORKER } from "../../workers/consumer.js";
 import { Alert } from "../../mongo_Models/alert.js"; // ⬅️ استيراد Alert
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js"; // ⬅️ استيراد أنواع Alert
+import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
+import { HANDLE_GATE_EXIT_EMIT } from "../../constants/constants.js";
 
 
 export const handleGateExitRequest = async (job: Job) => {
-    const { plateNumber, requestId,timestamp,gate="gate2" } = job.data;
+    const { plateNumber, requestId, timestamp, gate = "gate2" } = job.data;
 
     // ⬅️ القيمة الافتراضية بقت الرفض (أكثر أمانًا)
     let decision = 'DENY_EXIT';
     let reason = 'UNHANDLED_ERROR';
     let message: string | null = null;
     let jobStatus: object = { success: false, decision, reason, plateNumber };
+    let targetUserId: number | null = null
+    let targetSession: null | ParkingSession = null
     const mqttClient = await getMQTTClient_IN_WORKER();
+    const Emitter = getEmitter();
 
     try {
         const vehicle = await prisma.vehicle.findUnique({
@@ -41,16 +46,22 @@ export const handleGateExitRequest = async (job: Job) => {
             throw new Error(message);
         }
 
+        targetSession = lastSession;
+        targetUserId = targetSession.userId;
+
+
+
+
         // --- ⬇️ تعديل 2: التعامل مع "السباق" ⬇️ ---
         // 2. هل الجلسة دي لسه نشطة؟
         if (lastSession.status === ParkingSessionStatus.ACTIVE) {
             // ده معناه إن العربية وصلت البوابة "قبل" ما الـ handleSlotExit يشتغل
             console.warn(`RACE CONDITION: Car ${plateNumber} at gate, but session ${lastSession.id} is still ACTIVE. Telling gate to wait.`);
-            
+
             decision = 'DENY_EXIT'; // 🛑
             reason = 'SESSION_STILL_PROCESSING';
             message = "Processing exit... Please wait 10 seconds.";
-            
+
             jobStatus = { success: true, decision, message, reason };
             // اخرج بدري، الـ finally هيبعت الرد
             return jobStatus;
@@ -108,18 +119,29 @@ export const handleGateExitRequest = async (job: Job) => {
         }
 
         else if (status === TransactionStatus.CANCELLED) {
-    // (الأدمن لغاها)
-    console.log(`Payment for ${lastSession.id} was CANCELLED. Opening gate.`);
-    decision = 'ALLOW_EXIT';
-    reason = 'SESSION_CANCELLED';
-    message = 'Session was cancelled by administration.';
-}
+            // (الأدمن لغاها)
+            console.log(`Payment for ${lastSession.id} was CANCELLED. Opening gate.`);
+            decision = 'ALLOW_EXIT';
+            reason = 'SESSION_CANCELLED';
+            message = 'Session was cancelled by administration.';
+        }
 
         else {
             console.log(`WEIRD STATE: Job ${job.id}, Status: ${status}, Method: ${lastSession.paymentType}`);
             decision = 'DENY_EXIT';
             reason = 'UNKNOWN_PAYMENT_STATUS';
             message = 'Unknown payment status. Please contact support.';
+        }
+
+
+        if (decision === 'ALLOW_EXIT' && targetSession.id) {
+            await prisma.parkingSession.update({
+                where: { id: targetSession.id as any },
+                data: {
+                    status: ParkingSessionStatus.COMPLETED,
+                }
+            });
+            console.log(`✅ Session ${targetSession.id} formally CLOSED (COMPLETED).`);
         }
 
         jobStatus = { success: true, decision, message, reason };
@@ -149,6 +171,20 @@ export const handleGateExitRequest = async (job: Job) => {
 
         console.log(`📢 Publishing final decision to topic garage/gate/event/response`, responsePayload);
         mqttClient.publish(`garage/gate/event/response`, responsePayload);
+
+
+
+        if (targetUserId) {
+            Emitter.to(`user_${targetUserId}`).emit(HANDLE_GATE_EXIT_EMIT, {
+                decision,
+                reason,
+                message,
+                sessionId: targetSession?.id,
+                plateNumber
+            });
+            console.log(`📡 Socket emitted to user ${targetUserId} with decision: ${decision}`);
+        }
+
 
         return jobStatus;
     }

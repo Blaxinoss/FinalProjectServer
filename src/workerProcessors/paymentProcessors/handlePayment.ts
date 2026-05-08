@@ -4,22 +4,26 @@ import { paymentMethod, TransactionStatus, type ParkingSession, type paymentTran
 import { Alert } from "../../mongo_Models/alert.js";
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js";
 import { stripe } from "../../services/stripe.js";
- import { sendFCMNotification } from "../../services/notifications.js";
+import { sendFCMNotification } from "../../services/notifications.js";
 import { sendSmsNotification } from "../../services/smsTwilio.js";
+import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
+import { PAYMENT_FAILED_AND_BLACKLISTED } from "../../constants/constants.js";
 
 export const handlePayment = async (job: Job) => {
 
     const { sessionId, amount, userId, plateNumber } = job.data
+    const Emitter = getEmitter();
 
-    if (!sessionId || !amount || !userId || !plateNumber) {
+
+    if (!sessionId || typeof amount !== 'number' || !userId || !plateNumber) {
         console.log(`data missing while running job ${job.id}`)
-        throw (`data is missing for the payment worker on job ${job.id}`)
+        throw new Error(`data is missing for the payment worker on job ${job.id}`)
     }
-    
+
 
     const session: ParkingSession = await prisma.parkingSession.findUniqueOrThrow({
         where: { id: sessionId },
-        include:{user:{select:{notificationToken:true}}}
+        include: { user: { select: { notificationToken: true } } }
     })
 
     const user: User = await prisma.user.findUniqueOrThrow({
@@ -39,6 +43,7 @@ export const handlePayment = async (job: Job) => {
     const paymentTransaction: paymentTransaction = await prisma.paymentTransaction.create({
         data: {
             amount,
+            userId: user.id,
             parkingSessionId: sessionId,
             paymentMethod: session.paymentType,
             transactionStatus: TransactionStatus.PENDING
@@ -99,10 +104,10 @@ export const handlePayment = async (job: Job) => {
             });
             // (إرسال إشعار "إيصال" للعميل)
             if (user.notificationToken) {
-             await sendFCMNotification(user.notificationToken, "Payment Successful", `Charged ${amount/100} EGP for your parking.`);
-} else {
-    console.warn(`No notification token found for user in session ${session.id}`);
-}
+                await sendFCMNotification(user.notificationToken, "Payment Successful", `Charged ${amount / 100} EGP for your parking.`);
+            } else {
+                console.warn(`No notification token found for user in session ${session.id}`);
+            }
             return `Payment ${paymentTransaction.id} completed and payment went successfully. for job ${job.id}`;
             // --- ⬆️ نهاية الخطوة الحاسمة ⬆️ ---
         } catch (stripeError: any) {
@@ -121,54 +126,67 @@ export const handlePayment = async (job: Job) => {
             });
 
             await prisma.user.update({
-                where: { id: userId }, 
+                where: { id: userId },
                 data: { hasOutstandingDebt: true }
             });
             console.log(`⬛️ User ${userId} blacklisted.`);
-            
+
 
             console.log(`⬛️ Vehicle ${plateNumber} blacklisted due to failed payment.`);
 
             //create the checkout Link to give to the exiting user when failing to pay
             const Checkoutsession = await stripe.checkout.sessions.create({
-            line_items: [{
-                price_data: {
-                currency: 'egp',
-                product_data: {
-                    name: `Parking Fee ${session.id}`,
-                },
-                unit_amount: amount,
-                },
-                quantity: 1,
-            }],
-            mode: 'payment',
-            success_url: 'https://your-site.com/thanks',
-            cancel_url: 'https://your-site.com/try-again',
+                line_items: [{
+                    price_data: {
+                        currency: 'egp',
+                        product_data: {
+                            name: `Parking Fee ${session.id}`,
+                        },
+                        unit_amount: amount,
+                    },
+                    quantity: 1,
+                }],
+                mode: 'payment',
+                success_url: 'https://your-site.com/thanks',
+                cancel_url: 'https://your-site.com/try-again',
 
-            //  <<<--- هنا أهم جزء ---<<<
-            metadata: {
-                'parking_session_id': session.id,
-                'user_phone':user.phone,
-                'user_mail':user.email,
-                'user_Nationa_id':user.NationalID,
-            }
+                //  <<<--- هنا أهم جزء ---<<<
+                metadata: {
+                    'parking_session_id': session.id,
+                    'transactionId': paymentTransaction.id,
+                    'parkingSessionId': paymentTransaction.parkingSessionId,
+                    'userId': userId,
+                    'user_phone': user.phone,
+                    'user_mail': user.email,
+                    'user_Nationa_id': user.NationalID,
+                }
             });
 
+            await prisma.paymentTransaction.update({
+                where: { id: paymentTransaction.id },
+                data: {
+                    stripeCheckoutUrl: Checkoutsession.url,
+                    stripeSessionId: Checkoutsession.id,
+                }
 
-                //or use pushToken this is so critical back to it 
-                //TODO
+            })
+
+            //or use pushToken this is so critical back to it 
+            //TODO
+            //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
+            if (session.reservationId) {
                 //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
-                if (session.reservationId) {
-                //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
-if (user.notificationToken) {
+                if (user.notificationToken) {
                     console.log('sending application notification')
-                await sendFCMNotification(user.notificationToken,
-                     `Payment Failed for session ${sessionId}`,
-                 `We couldn't charge your card for ${amount/100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
 
-                 } else {
-    console.warn(`No notification token found for user in session ${session.id}`);
-}
+
+                    await sendFCMNotification(user.notificationToken,
+                        `Payment Failed for session ${sessionId}`,
+                        `We couldn't charge your card for ${amount / 100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
+
+                } else {
+                    console.warn(`No notification token found for user in session ${session.id}`);
+                }
             } else {
                 console.log('User is a walk in. Sending SMS.');
 
@@ -184,7 +202,14 @@ if (user.notificationToken) {
 
                     }
                 })
-                                    console.log('sending sms notification')
+                await Emitter.to(`user_${user.id}`).emit(PAYMENT_FAILED_AND_BLACKLISTED, {
+                    message: `payment has failed, please complete the transaction`,
+                    amount: amount / 100,
+                    checkoutUrl: Checkoutsession.url,
+                    sessionId: session.id
+                });
+                console.log("sending a blacklisted notification")
+                console.log('sending sms notification')
 
                 await sendSmsNotification(user.phone, `we apologize but your payment has failed an alert has been fired and someone is on his way to you to collect 
                     the money on cash,but the gate will still be oppened ${Checkoutsession.url
@@ -199,12 +224,12 @@ if (user.notificationToken) {
             return `Payment failed for session ${sessionId}. User blacklisted and notified. and Intent was canceled`;
         }
     }
-    
-          await prisma.paymentTransaction.update({
-                where: { id: paymentTransaction.id },
-                data: { transactionStatus: TransactionStatus.FAILED }
-            });
-console.log(`Unknown payment method: ${session.paymentType}`); // ⬅️ استخدم paymentMethod
+
+    await prisma.paymentTransaction.update({
+        where: { id: paymentTransaction.id },
+        data: { transactionStatus: TransactionStatus.FAILED }
+    });
+    console.log(`Unknown payment method: ${session.paymentType}`); // ⬅️ استخدم paymentMethod
 }
 
 
