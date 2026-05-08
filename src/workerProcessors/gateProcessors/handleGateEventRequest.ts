@@ -10,20 +10,29 @@ import { sessionLifecycleQueue } from '../../queues/queues.js';
 // ... الدوال المساعدة findSafeAlternativeSlot و assignSlotAndStartSession تبقى كما هي ...
 import { redisWorker } from '../../workers/consumer.js';
 import { getEmitter } from '../../db&init/redisWorkerEmitterWithClient.js';
+import { normalizePlate } from '../../utils/plateNormalizer.js';
 
 
 /**
  * 🚪 الدالة الرئيسية التي تتعامل مع طلبات الدخول من البوابة (بنمط القرار النهائي).
  */
 export const handleGateEntryRequest = async (job: Job) => {
-    const { plateNumber, requestId, gate = "gate1" } = job.data;
+    const {  requestId, gate = "gate1" } = job.data;
+    const plateNumber = normalizePlate(job.data.plateNumber);
 
+  
     // 1. تعريف متغيرات القرار النهائي
     let decision = 'DENY_ENTRY'; // القيمة الافتراضية هي الرفض
     let reason = 'UNHANDLED_CASE';
     let slotName: string | null = null;
     let message: string | null = null;
     let jobStatus: object = { success: false, decision, reason, slotName };
+
+      if (!plateNumber) {
+    reason = 'INVALID_PLATE_FORMAT';
+    // let the finally block send the DENY response
+    throw new Error('Plate number is null or could not be normalized');
+}
 
     const mqttClient = await getMQTTClient_IN_WORKER();
     const responseTopic = `garage/gate/event/response`;
@@ -79,8 +88,13 @@ export const handleGateEntryRequest = async (job: Job) => {
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
 
             
-            if (designatedSlotStatus?.status === SlotStatus.AVAILABLE.toUpperCase()) {
-                const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
+if (
+  designatedSlotStatus?.status === SlotStatus.AVAILABLE.toUpperCase() ||
+  designatedSlotStatus?.status === SlotStatus.RESERVED.toUpperCase() || 
+    designatedSlotStatus?.status === SlotStatus.RESERVED
+
+) {
+                    const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
                 await assignSlotAndStartSession(reservation, designatedSlot);
                 console.log(`✅ Reservation honored. Vehicle ${plateNumber} assigned to slot ${designatedSlot?.id}.`);
                 console.log(`saeed ${designatedSlotStatus} vs ${SlotStatus.AVAILABLE.toUpperCase()}`);

@@ -64,9 +64,9 @@ async function seedMongo() {
 
         const defaultState = {
             status: SlotStatus.AVAILABLE,
-            current_vehicle: null,
-            conflict_details: null,
-            violating_vehicle: null,
+            current_vehicle: {},
+            conflict_details: {},
+            violating_vehicle: {},
             stats: { total_uses_today: 0 }
         };
 

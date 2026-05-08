@@ -67,6 +67,7 @@ export const connectMQTT = () => {
       }
       else if (topic === "garage/slots/event") {
         console.log("📍 Slot Event Request message -> slot-event-queue");
+        console.log("Payload for slot event:", parsed);
         await slotEventQueue.add('slot-event', parsed, { priority: 3 });
       }
       else if (topic === "garage/gate/exit/request") {

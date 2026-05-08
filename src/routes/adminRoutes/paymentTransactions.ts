@@ -81,7 +81,7 @@ router.put("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 
   if (paymentMethod !== undefined) {
-    if (!Object.values(PaymentMethod).includes(paymentMethod)) {
+    if (!Object.values(paymentMethod).includes(paymentMethod)) {
       res.status(400).json({ success: false, message: "Invalid paymentMethod value" });
       return;
     }
@@ -184,7 +184,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  if (!Object.values(PaymentMethod).includes(paymentMethod)) {
+  if (!Object.values(paymentMethod).includes(paymentMethod)) {
     res.status(400).json({ success: false, message: "Invalid paymentMethod value" });
     return;
   }

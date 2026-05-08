@@ -6,10 +6,12 @@ import { Alert } from "../../mongo_Models/alert.js"; // ⬅️ استيراد Al
 import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js"; // ⬅️ استيراد أنواع Alert
 import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
 import { HANDLE_GATE_EXIT_EMIT } from "../../constants/constants.js";
+import { normalizePlate } from "../../utils/plateNormalizer.js";
 
 
 export const handleGateExitRequest = async (job: Job) => {
-    const { plateNumber, requestId, timestamp, gate = "gate2" } = job.data;
+    const {  requestId, timestamp, gate = "gate2" } = job.data;
+const plateNumber = normalizePlate(job.data.plateNumber);
 
     // ⬅️ القيمة الافتراضية بقت الرفض (أكثر أمانًا)
     let decision = 'DENY_EXIT';
@@ -20,6 +22,10 @@ export const handleGateExitRequest = async (job: Job) => {
     let targetSession: null | ParkingSession = null
     const mqttClient = await getMQTTClient_IN_WORKER();
     const Emitter = getEmitter();
+if (!plateNumber) {
+    reason = 'INVALID_PLATE_FORMAT';
+    throw new Error('Plate number is null or could not be normalized');
+}
 
     try {
         const vehicle = await prisma.vehicle.findUnique({

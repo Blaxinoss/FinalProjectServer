@@ -20,6 +20,14 @@ const app: Application = express();
 const httpServer = createServer(app);
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath("/admin/queues");
+const corsOptions = {
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
+};
+
+app.use(cors(corsOptions));
+
 app.use('/webhooks', webHookRouter)
 
 app.use(express.json());
@@ -57,7 +65,7 @@ createBullBoard({
 });
 
 
-app.use(cors())
+
 app.use("/admin/queues", serverAdapter.getRouter());
 
 

@@ -8,6 +8,7 @@ import { Alert } from "../../mongo_Models/alert.js";
 import { calculateBill } from "../Helpers/Bills.js";
 import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
 import { HANDLE_SLOT_EXIT_EMIT } from "../../constants/constants.js";
+import { normalizePlate } from "../../utils/plateNormalizer.js";
 // Function to calculate bill (needs implementation)
 // import { calculateBill } from "../services/billingService.js";
 
@@ -40,12 +41,16 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
 
     // --- 2. Find the Correct Active Session ---
 
-    // Case A: Slot was in CONFLICT
-    if (leavingSlot.status === SlotStatus.CONFLICT && leavingSlot.current_vehicle?.plate_number) {
-        const plateNumber = leavingSlot.current_vehicle.plate_number;
-        console.log(`Exit from CONFLICTED slot ${slot_id}. Searching session by plate: ${plateNumber}`);
-        // Find vehicle first
-        const vehicle = await prisma.vehicle.findUnique({ where: { plate: plateNumber } });
+// Case A: Slot was in CONFLICT
+if (leavingSlot.status === SlotStatus.CONFLICT && leavingSlot.current_vehicle?.plate_number) {
+    const plateNumber = normalizePlate(leavingSlot.current_vehicle.plate_number);
+    console.log(`Exit from CONFLICTED slot ${slot_id}. Searching session by plate: ${plateNumber}`);
+    // Find vehicle first
+    if (!plateNumber) {
+        console.warn(`Could not normalize plate for conflicted slot exit.`);
+        return;
+    }
+    const vehicle = await prisma.vehicle.findUnique({ where: { plate: plateNumber } });
 
 
         console.log(`🧹 Cleared CONFLICT status from slot ${slot_id} as vehicle ${plateNumber} left.`);
@@ -131,7 +136,7 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
     try {
         const jobIdsToCancel = [activeSession.exitCheckJobId, activeSession.occupancyCheckJobId].filter(Boolean); // Get non-null job IDs
         for (const jobId of jobIdsToCancel) {
-            const job = await sessionLifecycleQueue.getJob(jobId);
+            const job = await sessionLifecycleQueue.getJob(jobId!);
             if (job) {
                 await job.remove();
                 console.log(`🧹 Removed job ${jobId} for exiting session ${activeSession.id}.`);
@@ -165,7 +170,7 @@ export const handleSlotExit = async (slot_id: string, timestamp: any) => {
             sessionId: closedSession.id,
             amount: billAmount,
             userId: closedSession.userId,
-            plateNumber: closedSession.vehicle.plate,
+plateNumber: normalizePlate(closedSession.vehicle.plate),
             // Add other necessary payment details
         }, { priority: 7 }); // Example priority
     }

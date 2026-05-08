@@ -21,6 +21,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, type, status } = req.body;
 
+  if(!id) {
+    return res.status(400).json({ error: "Gate ID is required in the URL." });
+  }
   try {
     const gate = await prisma.gate.update({
       where: { id },

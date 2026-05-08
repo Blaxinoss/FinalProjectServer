@@ -12,8 +12,8 @@ async function main() {
     await prisma.paymentTransaction.deleteMany();
     await prisma.parkingSession.deleteMany();
     await prisma.reservation.deleteMany();
-    await prisma.vehicle.deleteMany();
-    await prisma.user.deleteMany();
+    // await prisma.vehicle.deleteMany();
+    // await prisma.user.deleteMany();
     await prisma.parkingSlot.deleteMany();
 
     // --- 2. Create Slots (Structure + Type) ---
@@ -37,7 +37,8 @@ async function main() {
             NationalID: 'NID-AMR-A', address: 'Addr A', licenseNumber: 'LIC-A', licenseExpiry: new Date('2027-01-01'),
             notificationToken:"21312",
             paymentGatewayToken: 'cus_FAKE_TOKEN_AMR', // توكن وهمي
-            Vehicles: { create: { plate: '١٩٩٧-سمر', color: 'Red' } },
+            Vehicles: { create: { plate: '٥٦١-روص'
+                , color: 'Red' } },
         }, include: { Vehicles: true }
     });
     
