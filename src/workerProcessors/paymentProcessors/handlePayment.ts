@@ -6,11 +6,13 @@ import { AlertSeverity, AlertType } from "../../types/parkingEventTypes.js";
 import { stripe } from "../../services/stripe.js";
 import { sendFCMNotification } from "../../services/notifications.js";
 import { sendSmsNotification } from "../../services/smsTwilio.js";
+import { getEmitter } from "../../db&init/redisWorkerEmitterWithClient.js";
+import { PAYMENT_FAILED_AND_BLACKLISTED } from "../../constants/constants.js";
 
 export const handlePayment = async (job: Job) => {
 
     const { sessionId, amount, userId, plateNumber } = job.data
-
+    const Emitter = getEmitter();
 
 
     if (!sessionId || typeof amount !== 'number' || !userId || !plateNumber) {
@@ -151,12 +153,23 @@ export const handlePayment = async (job: Job) => {
                 //  <<<--- هنا أهم جزء ---<<<
                 metadata: {
                     'parking_session_id': session.id,
+                    'transactionId': paymentTransaction.id,
+                    'parkingSessionId': paymentTransaction.parkingSessionId,
+                    'userId': userId,
                     'user_phone': user.phone,
                     'user_mail': user.email,
                     'user_Nationa_id': user.NationalID,
                 }
             });
 
+            await prisma.paymentTransaction.update({
+                where: { id: paymentTransaction.id },
+                data: {
+                    stripeCheckoutUrl: Checkoutsession.url,
+                    stripeSessionId: Checkoutsession.id,
+                }
+
+            })
 
             //or use pushToken this is so critical back to it 
             //TODO
@@ -165,6 +178,8 @@ export const handlePayment = async (job: Job) => {
                 //!!!!!!!!!!!!!!!!!!####!!!!!!!!!!!!!!!
                 if (user.notificationToken) {
                     console.log('sending application notification')
+
+
                     await sendFCMNotification(user.notificationToken,
                         `Payment Failed for session ${sessionId}`,
                         `We couldn't charge your card for ${amount / 100} EGP. The gate will open, but your vehicle is now blacklisted. Please pay via this link:${Checkoutsession.url}`);
@@ -187,6 +202,13 @@ export const handlePayment = async (job: Job) => {
 
                     }
                 })
+                await Emitter.to(`user_${user.id}`).emit(PAYMENT_FAILED_AND_BLACKLISTED, {
+                    message: `payment has failed, please complete the transaction`,
+                    amount: amount / 100,
+                    checkoutUrl: Checkoutsession.url,
+                    sessionId: session.id
+                });
+                console.log("sending a blacklisted notification")
                 console.log('sending sms notification')
 
                 await sendSmsNotification(user.phone, `we apologize but your payment has failed an alert has been fired and someone is on his way to you to collect 

@@ -14,6 +14,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum GateType {
+  ENTRY
+  EXIT
+}
+
+enum GateStatus {
+  OPEN
+  CLOSED
+}
+
 enum ReservationsStatus {
   CONFIRMED
   CANCELLED
@@ -65,6 +75,7 @@ model User {
   licenseNumber       String               @unique @db.VarChar(50)
   paymentGatewayToken String?              @unique @db.VarChar(255)
   notificationToken   String?              @db.VarChar(255)
+  notificationAllowed Boolean              @default(true)
   licenseExpiry       DateTime
   paymentTransactions paymentTransaction[]
   hasOutstandingDebt  Boolean              @default(false)
@@ -151,8 +162,19 @@ model paymentTransaction {
   reservationId       Int?
   reservation         Reservation?      @relation(fields: [reservationId], references: [id])
   paymentMethod       paymentMethod?
+  stripeCheckoutUrl   String?
+  stripeSessionId     String?
   paidAt              DateTime?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   transactionStatus   TransactionStatus @default(PENDING) // completed, failed, pending
+}
+
+model Gate {
+  id        String     @id @default(cuid())
+  name      String
+  type      GateType
+  status    GateStatus @default(CLOSED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }

@@ -23,7 +23,9 @@ const router = Router();
 
 router.post("/", async (req: Request, res: Response) => {
   const userId = req.user?.id!;
-  const { plateNumber, startTime, endTime, paymentTypeDecision, paymentMethodId, isImmediate } = req.body;
+  //const { plateNumber, startTime, endTime, paymentTypeDecision, paymentMethodId, isImmediate } = req.body;
+
+  const { plateNumber, startTime, endTime, paymentTypeDecision, isImmediate } = req.body;
   let paymentIntentId: string | null = null;
 
   try {
@@ -60,6 +62,11 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: `You cannot reserve a slot for more than ${MAX_RESERVATION_HOURS} hours.` });
     }
 
+    if (!user.paymentGatewayToken) {
+      return res.status(400).json({ error: `stripe customer id is not found in the database for this user` });
+
+    }
+
     // 3. --- 🚫 منع الحجز المزدوج (Double Booking Check) ---
     const existingActiveReservation = await prisma.reservation.findFirst({
       where: {
@@ -82,7 +89,7 @@ router.post("/", async (req: Request, res: Response) => {
     // الأفضل تخليها: status: 'CONFIRMED' أو تضيف 'COMPLETED' للـ not.
     const busyFromReservationsDocs = await prisma.reservation.findMany({
       where: {
-        status: { not: "FULFILLED" }, // 👈 راقب دي في الديباج
+        status: { notIn: ["FULFILLED", "CANCELLED"] }, // 👈 راقب دي في الديباج
         startTime: { lt: end },
         endTime: { gt: start }
       },
@@ -148,10 +155,28 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(409).json({ error: "No available slots for the selected time." });
     }
 
+
+    const { data: cards } = await stripe.paymentMethods.list({ customer: user.paymentGatewayToken, type: "card" })
+    const customer = await stripe.customers.retrieve(user.paymentGatewayToken);
+
+    // 2. هات قائمة الكروت (لازم await)
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: customer.id as string,
+      type: "card",
+    });
+
+
+    // 3. استخراج الـ ID (أول كارت في القائمة)
+    const defaultPaymentMethodId = paymentMethods.data[0]?.id ?? null;
+
+    if (!defaultPaymentMethodId) {
+      throw new Error("User has no linked cards.");
+    }
+
     // ... (باقي كود الدفع وإنشاء الحجز زي ما هو) ...
     // 6. --- 💳 عملية الدفع (Stripe Hold) ---
     if (paymentTypeDecision === paymentMethod.CARD) {
-      if (!paymentMethodId || !user.paymentGatewayToken) {
+      if (cards.length === 0 || !user.paymentGatewayToken) {
         return res.status(400).json({ error: "Card details missing or user not linked to Stripe." });
       }
 
@@ -159,7 +184,7 @@ router.post("/", async (req: Request, res: Response) => {
         amount: HOLDAMOUNT_WHILE_RESERVATIONS,
         currency: 'egp',
         customer: user.paymentGatewayToken,
-        payment_method: paymentMethodId,
+        payment_method: defaultPaymentMethodId,
         capture_method: 'manual',
         confirm: true,
         off_session: true,
@@ -207,6 +232,7 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(500).json({
       error: `Internal server error: ${error.raw?.message || error.message || "Unknown error"}`
     });
+    return;
   }
 });
 
@@ -237,6 +263,7 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching user reservations:", error);
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
 });
 
@@ -265,6 +292,7 @@ router.get("/active", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching active reservation:", error);
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
 });
 
@@ -374,6 +402,7 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error cancelling reservation:", error);
     res.status(500).json({ error: "Internal server error" });
+    return;
   }
 });
 

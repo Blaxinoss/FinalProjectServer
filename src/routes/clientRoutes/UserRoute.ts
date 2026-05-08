@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 
 import { prisma } from "../prsimaForRouters.js";
 import { createSetupIntent } from "../../services/stripeUserAdding.js";
+import { stripe } from "../../services/stripe.js";
 
 //TODO
 //  AUTH
@@ -27,9 +28,44 @@ router.get("/", async (req: Request, res: Response) => {
       code: error.code || null,
       message: `Error while fetcching the user cars: ${error.message || "Unknown error"}`
     });
+    return;
   }
 });
+router.get("/cards", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id!;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
+    if (!user?.paymentGatewayToken) {
+      res.status(404).json({
+        success: false,
+        message: "لم يتم العثور على حساب دفع لهذا المستخدم"
+      });
+      return;
+    }
+
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: user.paymentGatewayToken,
+
+      type: "card",
+    });
+
+    // 2. رد النجاح
+    res.status(200).json({
+      success: true,
+      data: paymentMethods.data
+    });
+
+  } catch (error: any) {
+    // 3. حالة الـ 500 (خطأ غير متوقع في السيستم أو Stripe)
+    console.error("Stripe Error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "حدث خطأ فني أثناء جلب البطاقات"
+    });
+    return;
+  }
+});
 
 router.delete("/", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -48,22 +84,92 @@ router.delete("/", async (req: Request, res: Response): Promise<void> => {
       code: error.code || null,
       message: `Error while deleting the user: ${error.message || "Unknown error"}`
     });
+    return;
   }
 });
 
+
+router.delete("/cards/:paymentMethodId", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id!;
+    const { paymentMethodId } = req.params;
+
+    // 1. التأكد من وجود الـ paymentMethodId في الريكويست
+    if (!paymentMethodId) {
+      res.status(400).json({
+        success: false,
+        message: "Payment Method ID is required"
+      });
+      return;
+    }
+
+    // 2. نجيب بيانات اليوزر عشان الـ Customer Token
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user?.paymentGatewayToken) {
+      res.status(404).json({
+        success: false,
+        message: "couldn't find customer token for this user"
+      });
+      return;
+    }
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: user.paymentGatewayToken,
+      type: "card",
+    });
+
+    const userCards = paymentMethods.data;
+
+    const cardExists = userCards.some((card) => card.id === paymentMethodId);
+    if (!cardExists) {
+      res.status(403).json({
+        success: false,
+        message: "You don't have permission to delete this card or it dosn't exist"
+      });
+      return;
+    }
+
+    if (userCards.length <= 1) {
+      res.status(400).json({
+        success: false,
+        message: "you can't delete the only card you have, please and another card and try again"
+      });
+      return;
+    }
+
+    await stripe.paymentMethods.detach(paymentMethodId);
+
+    // 7. الرد بنجاح العملية
+    res.status(200).json({
+      success: true,
+      message: "card has been deleted successfully"
+    });
+
+  } catch (error: any) {
+    console.error("Stripe Detach Error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: `error while deleting card ${error.message || "Unknown error"}`
+    });
+    return;
+  }
+});
 
 router.put("/", async (req: Request, res: Response): Promise<void> => {
   try {
 
     const userId = req.user?.id!;
-    const { name, address, licenseNumber, licenseExpiry } = req.body;
+    const { name, address, licenseNumber, phone } = req.body;
+
 
 
     const dataToUpdate = {
       name,
       address,
       licenseNumber,
-      licenseExpiry: new Date(licenseExpiry) // (لازم نتأكد إنها تاريخ سليم)
+      phone,
+      // licenseExpiry: new Date(licenseExpiry) 
+      // licenseExpiry
     };
 
     const updatedUser = await prisma.user.update({
@@ -73,6 +179,7 @@ router.put("/", async (req: Request, res: Response): Promise<void> => {
 
 
     res.status(200).json({
+      success: true,
       message: "User updated successfully",
       user: updatedUser,
     });
@@ -81,6 +188,40 @@ router.put("/", async (req: Request, res: Response): Promise<void> => {
       code: error.code || null,
       message: `Error while updating the user: ${error.message || "Unknown error"}`
     });
+    return;
+  }
+});
+
+router.put("/notification-allowed", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id!;
+    const { notificationAllowed } = req.body;
+
+    if (typeof notificationAllowed !== "boolean") {
+      res.status(400).json({
+        success: false,
+        message: "notificationAllowed must be a boolean value",
+      });
+      return;
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { notificationAllowed },
+      include: { ParkingSessions: true, Vehicles: true },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Notifications ${notificationAllowed ? "enabled" : "disabled"} successfully`,
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      code: error.code || null,
+      message: `Error while updating notification preference: ${error.message || "Unknown error"}`
+    });
+    return;
   }
 });
 
@@ -103,6 +244,7 @@ router.get('/setup-intent', async (req: Request, res: Response): Promise<void> =
     res.status(200).json(setupData);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+    return;
   }
 });
 
@@ -127,6 +269,7 @@ router.post('/register-push-token', async (req: Request, res: Response) => {
   } catch (e) {
     console.error("Error saving token:", e);
     res.status(500).send({ success: false, message: "Failed to save token." });
+    return;
   }
 });
 

@@ -14,11 +14,13 @@ import { getSocketServer, initSocket } from "./db&init/socket.js";
 import mainRouter from "./routes/realRouters.js";
 import { createEmitters } from "./db&init/redisWorkerEmitterWithClient.js";
 import cors from 'cors'
+import webHookRouter from './webhooks/webHookRoute.js'
 
 const app: Application = express();
 const httpServer = createServer(app);
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath("/admin/queues");
+app.use('/webhooks', webHookRouter)
 
 app.use(express.json());
 
@@ -60,6 +62,7 @@ app.use("/admin/queues", serverAdapter.getRouter());
 
 
 app.use('/api', mainRouter);
+
 
 app.get('/sayhi', (req, res) => {
     res.send('Hello from our parking system Api ^^');
