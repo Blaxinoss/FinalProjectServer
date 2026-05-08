@@ -24,7 +24,8 @@ export const config = {
         host: process.env.REDIS_HOST || "my-redis-queue",
         port: Number(process.env.REDIS_PORT) || 6379,
     },
- mqttBroker:`mqtts://${process.env.AWS_MQTT_ENDPOINT}`,
+    //`mqtts://${process.env.AWS_MQTT_ENDPOINT}` ||
+ mqttBroker: `mqtts://${process.env.AWS_MQTT_ENDPOINT}`,
   mqttOptions: <IClientOptions>{
     key: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-private.pem.key')),
     cert: fs.readFileSync(path.join(CERT_DIR,'610e9ceefe0c8e1c6207671f035f5b47a9a94f92fc33ce0f3778d8525c6ccf97-certificate.pem.crt')),
@@ -33,7 +34,6 @@ export const config = {
     clean: true,
     protocolId:'MQTT',
     reconnectPeriod: 5000,
-    port: 8883,
     connectTimeout: 30000,
     rejectUnauthorized:true,
     keepalive: 60,

@@ -74,10 +74,11 @@ export const  handleGateEntryRequest = async (job: Job) => {
             console.log(`Designated slot ${reservation.slotId} status: ${designatedSlotStatus?.status}`);
 
             
-            if (designatedSlotStatus?.status === SlotStatus.AVAILABLE) {
+            if (designatedSlotStatus?.status === SlotStatus.AVAILABLE.toUpperCase()) {
                 const designatedSlot = await prisma.parkingSlot.findUnique({ where: { id: reservation.slotId } });
                 await assignSlotAndStartSession(reservation, designatedSlot);
                 console.log(`✅ Reservation honored. Vehicle ${plateNumber} assigned to slot ${designatedSlot?.id}.`);
+                console.log(`saeed ${designatedSlotStatus} vs ${SlotStatus.AVAILABLE.toUpperCase()}`);
                 // ✅ تعيين القرار بالنجاح
                 decision = 'ALLOW_ENTRY';
                 reason = 'RESERVATION_HONORED';

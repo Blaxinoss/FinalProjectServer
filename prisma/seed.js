@@ -1,7 +1,7 @@
 // prisma/seed.ts
 import {  ReservationsStatus, SlotType,  paymentMethod } from '../src/generated/prisma/index.js'; // تأكد من المسار
 
-import { prisma } from '../src/routes/prsimaForRouters.js';
+import { prisma } from '../dist/src/routes/prsimaForRouters.js';
 import { randomUUID } from 'crypto';
 
 async function main() {
@@ -77,7 +77,7 @@ async function main() {
     // Amr's Reservation (Card, Fake PI_ID)
     await prisma.reservation.create({
         data: {
-            userId: amr.id, vehicleId: amr.Vehicles[0]!.id, slotId: 'A-01',
+            userId: amr.id, vehicleId: amr.Vehicles[0].id, slotId: 'A-01',
             startTime: now, endTime: oneHourFromNow,
             status: ReservationsStatus.CONFIRMED,
             paymentType: paymentMethod.CARD,
@@ -88,7 +88,7 @@ async function main() {
     // Kareem's Reservation (Cash)
     await prisma.reservation.create({
         data: {
-            userId: kareem.id, vehicleId: kareem.Vehicles[0]!.id, slotId: 'A-02',
+            userId: kareem.id, vehicleId: kareem.Vehicles[0].id, slotId: 'A-02',
             startTime: now, endTime: oneHourFromNow,
             status: ReservationsStatus.CONFIRMED,
             paymentType: paymentMethod.CASH,
